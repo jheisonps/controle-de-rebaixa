@@ -40,7 +40,11 @@ function lerPreco(v) {
   const n = parseFloat(v);
   return isNaN(n) ? null : Math.round(n * 100) / 100;
 }
-const precoTexto = (n) => (n == null ? "" : String(n).replace(".", ","));
+const precoTexto = (n) => (n == null ? "" : n.toFixed(2).replace(".", ","));
+const ico = (n) => `<i data-lucide="${n}"></i>`;
+function icones() { try { lucide.createIcons(); } catch (e) {} }
+const ICONE = { hoje: "alert-triangle", urgente: "clock", atencao: "calendar-days", ok: "check" };
+const ROTULO = { hoje: "Vencidos / hoje", urgente: "1 a 3 dias", atencao: "4 a 7 dias", ok: "Mais de 7 dias" };
 
 // ---------- Máscara e validação de data ----------
 function mascara(el) {
@@ -50,6 +54,24 @@ function mascara(el) {
   });
 }
 document.querySelectorAll(".data").forEach(mascara);
+
+// Textos digitados sempre em MAIÚSCULAS
+document.querySelectorAll("#n-nome, #e-nome, #busca").forEach((el) => {
+  el.setAttribute("autocapitalize", "characters");
+  el.addEventListener("input", () => {
+    const p = el.selectionStart;
+    el.value = el.value.toUpperCase();
+    try { el.setSelectionRange(p, p); } catch (e) {}
+  });
+});
+
+// Preços: a vírgula entra sozinha (digite 599 e aparece 5,99)
+document.querySelectorAll("#n-p1, #n-p2, #e-p1, #e-p2").forEach((el) => el.addEventListener("input", () => {
+  let d = el.value.replace(/\D/g, "").replace(/^0+/, "");
+  if (!d) { el.value = ""; return; }
+  d = d.padStart(3, "0").slice(-12);
+  el.value = d.slice(0, -2).replace(/^0+(?=\d)/, "") + "," + d.slice(-2);
+}));
 function paraISO(v) {
   const p = v.split("/");
   if (p.length !== 3 || p[0].length !== 2 || p[1].length !== 2 || p[2].length !== 4) return null;
@@ -71,10 +93,13 @@ document.querySelectorAll(".nav").forEach((b) => b.addEventListener("click", () 
 // ---------- Lista de produtos ----------
 function render() {
   const busca = $("#busca").value.trim().toLowerCase();
-  $("#resumo").innerHTML = GRUPOS.map((g) => {
-    const n = itens.filter((i) => g.t(diasPara(i.validade))).length;
-    return `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><strong>${n}</strong><span>${g.curto}</span></button>`;
-  }).join("");
+  const cont = {};
+  GRUPOS.forEach((g) => { cont[g.k] = itens.filter((i) => g.t(diasPara(i.validade))).length; });
+  const urg = cont.hoje + cont.urgente;
+  $("#resumo").innerHTML = `<div class="hero"><div><small>Prioridade</small><strong>${urg}</strong><span>${urg === 1 ? "produto para rebaixar" : "produtos para rebaixar"} (até 3 dias)</span></div>
+    <button class="hero-btn" id="hero-lancar" type="button">${ico("scan-barcode")}Lançar</button></div>
+    <div class="kpis">` + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><span class="ti">${ico(ICONE[g.k])}</span><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
+  $("#hero-lancar").addEventListener("click", () => document.querySelector('.nav[data-aba="bipar"]').click());
   document.querySelectorAll(".tile").forEach((t) => t.addEventListener("click", () => {
     filtro = filtro === t.dataset.f ? "todos" : t.dataset.f; render();
   }));
@@ -84,26 +109,27 @@ function render() {
   GRUPOS.filter((g) => filtro === "todos" || filtro === g.k).forEach((g) => {
     const lista = vis.filter((i) => g.t(diasPara(i.validade))).sort((a, b) => a.validade.localeCompare(b.validade));
     if (!lista.length) return;
-    html += `<div class="grupo" style="--c:${g.cor}">${g.nome} <small>(${lista.length})</small></div>`;
+    html += `<div class="grupo" style="--c:${g.cor}">${g.nome}<small>${lista.length}</small></div>`;
     lista.forEach((i) => {
       const d = diasPara(i.validade);
-      const big = d < 0 ? `<b>${-d}</b><span>${-d === 1 ? "dia vencido" : "dias vencido"}</span>` : d === 0 ? "<b>HOJE</b>" : `<b>${d}</b><span>${d === 1 ? "dia" : "dias"}</span>`;
-      html += `<div class="card" style="--c:${g.cor}">
-        <div class="dias ${d === 0 ? "txt" : ""}">${big}</div>
-        ${i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+      const status = d < 0 ? `Vencido há ${-d} ${-d === 1 ? "dia" : "dias"}` : d === 0 ? "Vence hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
+      const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
+      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "");
+      html += `<article class="card" style="--c:${g.cor}">${thumb}
         <div class="info"><strong>${esc(i.nome)}</strong>
-          <span>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span>
-          ${textoPrecos(i) ? `<span class="precos">${textoPrecos(i)}</span>` : ""}
-          <span>${i.codigo ? "Cód. " + esc(i.codigo) : "Sem código"}</span></div>
-        <div class="acoes"><button data-id="${i.id}" data-a="e" type="button" aria-label="Editar">✏️</button><button data-id="${i.id}" data-a="x" type="button" aria-label="Excluir">🗑️</button></div>
-      </div>`;
+          <div class="meta">${ico("calendar-days")}<b>${fmt(i.validade)}</b>${ico("package")}<b>${i.quantidade} un</b></div>
+          ${chips ? `<div class="chips">${chips}</div>` : ""}</div>
+        <div class="lado"><span class="pill">${status}</span>
+          <div class="acoes"><button data-id="${i.id}" data-a="e" type="button" aria-label="Editar">${ico("pencil")}</button><button class="del" data-id="${i.id}" data-a="x" type="button" aria-label="Excluir">${ico("trash-2")}</button></div></div>
+      </article>`;
     });
   });
-  $("#lista").innerHTML = html || `<div class="vazio">${itens.length ? "Nenhum produto encontrado." : "Nenhum produto lançado ainda.<br>Toque em <b>Lançar</b> para cadastrar o primeiro."}</div>`;
+  $("#lista").innerHTML = html || `<div class="vazio">${ico(itens.length ? "search-x" : "package-open")}<b>${itens.length ? "Nenhum produto encontrado" : "Nenhum produto lançado ainda"}</b><span>${itens.length ? "Tente outro nome ou código." : "Toque em Lançar para cadastrar o primeiro."}</span></div>`;
   document.querySelectorAll(".acoes button").forEach((b) => b.addEventListener("click", () => {
     b.dataset.a === "e" ? abrirEdicao(b.dataset.id) : excluir(b.dataset.id);
   }));
   atualizarAlerta();
+  icones();
 }
 $("#busca").addEventListener("input", render);
 
@@ -121,7 +147,7 @@ const dlg = $("#dlg");
 function abrirEdicao(id) {
   const i = itens.find((x) => x.id === id); if (!i) return;
   editandoId = id;
-  $("#e-nome").value = i.nome; $("#e-validade").value = fmt(i.validade);
+  $("#e-nome").value = (i.nome || "").toUpperCase(); $("#e-validade").value = fmt(i.validade);
   $("#e-qtd").value = i.quantidade; $("#e-p1").value = precoTexto(i.precoSemClube); $("#e-p2").value = precoTexto(i.precoComClube);
   fotoEdit = i.foto || ""; mostrarFoto($("#e-foto"), $("#btn-foto-e"), fotoEdit);
   dlg.showModal();
@@ -133,7 +159,7 @@ $("#form-edit").addEventListener("submit", async (ev) => {
   const v = paraISO($("#e-validade").value.trim());
   if (!v) return alert("Validade inválida. Use DD/MM/AAAA.");
   try {
-    const atual = itens.find((x) => x.id === editandoId), nome = $("#e-nome").value.trim();
+    const atual = itens.find((x) => x.id === editandoId), nome = $("#e-nome").value.trim().toUpperCase();
     await db.collection("lancamentos").doc(editandoId).update({
       nome, validade: v, quantidade: parseInt($("#e-qtd").value, 10) || 1, foto: fotoEdit,
       precoSemClube: lerPreco($("#e-p1").value), precoComClube: lerPreco($("#e-p2").value)
@@ -197,7 +223,7 @@ let ultimoBuscado = "", autoPreenchido = false;
 function mostrarFoto(img, btn, src) {
   img.classList.toggle("oculto", !src);
   if (src) img.src = src; else img.removeAttribute("src");
-  btn.textContent = src ? "📸 Trocar foto" : "📸 Tirar foto";
+  btn.innerHTML = ico("camera") + (src ? "Trocar foto" : "Tirar foto"); icones();
 }
 function reduzir(file) {
   return new Promise((ok, err) => {
@@ -248,7 +274,7 @@ async function preencher(codigo) {
     const d = await db.collection("produtos").doc(codigo).get();
     if (d.exists) {
       const p = d.data();
-      if (p.nome) { if (!nome.value) nome.value = p.nome; achou = true; fontes.push("seu catálogo"); }
+      if (p.nome) { if (!nome.value) nome.value = p.nome.toUpperCase(); achou = true; fontes.push("seu catálogo"); }
       if (p.foto && !fotoNova) { fotoNova = p.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), p.foto); }
     }
   } catch (e) {}
@@ -258,7 +284,7 @@ async function preencher(codigo) {
     const r = await consultarCosmos(codigo);
     if (r.dados) {
       const c = r.dados; fontes.push("Cosmos");
-      if (c.description && !nome.value) { nome.value = c.description; achou = true; }
+      if (c.description && !nome.value) { nome.value = c.description.toUpperCase(); achou = true; }
       if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
     } else aviso = r.aviso + (r.detalhe ? " (" + r.detalhe.join(" | ") + ")" : "");
   }
@@ -268,11 +294,11 @@ async function preencher(codigo) {
     const o = await consultarOFF(codigo);
     if (o.nome || o.foto) {
       fontes.push(o.fonte);
-      if (o.nome && !nome.value) { nome.value = o.nome; achou = true; }
+      if (o.nome && !nome.value) { nome.value = o.nome.toUpperCase(); achou = true; }
       if (o.foto && !fotoNova) { fotoNova = o.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), o.foto); }
     } else avisoOff = o.aviso;
   }
-  if (achou) { msg("✔ Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
+  if (achou) { msg("Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
   else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto.", "aviso");
   autoPreenchido = achou;
 }
@@ -352,10 +378,10 @@ function somPremio() {
 function fecharDup() { $("#dup").classList.add("oculto"); codigoAtual = null; }
 function mostrarDup(codigo, ja) {
   $("#form-novo").classList.add("oculto");
-  $("#dup-lista").innerHTML = ja.map((i) => `<div class="dup-item"><span><b>${esc(i.nome)}</b><br>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span><button data-id="${i.id}" type="button">✏️ Editar</button></div>`).join("");
+  $("#dup-lista").innerHTML = ja.map((i) => `<div class="dup-item"><span><b>${esc(i.nome)}</b><br>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span><button data-id="${i.id}" type="button">${ico("pencil")}Editar</button></div>`).join("");
   $("#dup-lista").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { fecharDup(); abrirEdicao(b.dataset.id); }));
   $("#dup-novo").onclick = () => { fecharDup(); $("#form-novo").classList.remove("oculto"); $("#n-codigo").value = codigo; ultimoBuscado = codigo; preencher(codigo); };
-  $("#dup").classList.remove("oculto");
+  $("#dup").classList.remove("oculto"); icones();
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 
@@ -391,7 +417,7 @@ campoCodigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.prev
 
 $("#form-novo").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim();
+  const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim().toUpperCase();
   const validade = paraISO($("#n-validade").value.trim());
   if (!validade) { $("#msg").textContent = "Validade inválida. Use DD/MM/AAAA."; return; }
   try {
@@ -402,7 +428,7 @@ $("#form-novo").addEventListener("submit", async (ev) => {
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
     limparNovo(); ev.target.classList.add("oculto"); codigoAtual = null;
-    iniciarCamera("✅ Produto salvo! ");
+    iniciarCamera("Produto salvo! ");
   } catch (e) { $("#msg").textContent = "Erro ao salvar: " + e.message; }
 });
 
@@ -413,7 +439,7 @@ function atualizarAlerta() {
   const u = urgentes(), el = $("#alerta");
   if (!u.length) { el.classList.add("oculto"); return; }
   const hoje = u.filter((i) => diasPara(i.validade) <= 0).length;
-  $("#alerta-txt").textContent = `⚠️ ${u.length} produto${u.length > 1 ? "s" : ""} para rebaixar` + (hoje ? ` — ${hoje} vence${hoje > 1 ? "m" : ""} HOJE ou já venceu` : " (até 3 dias)");
+  $("#alerta-txt").textContent = `${u.length} produto${u.length > 1 ? "s" : ""} para rebaixar` + (hoje ? ` — ${hoje} vence${hoje > 1 ? "m" : ""} HOJE ou já venceu` : " (até 3 dias)");
   el.classList.remove("oculto");
 }
 function tocarAlerta() { [0, 0.25, 0.5].forEach((q) => beep(1200, 0.18, q)); }
@@ -482,3 +508,4 @@ if ("serviceWorker" in navigator) {
   let rec = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (rec || !navigator.serviceWorker.controller) return; rec = true; location.reload(); });
 }
+icones();

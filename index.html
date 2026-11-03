@@ -4,51 +4,62 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Controle de Rebaixa</title>
-<meta name="theme-color" content="#ffd60a">
+<meta name="theme-color" content="#172B4D">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topo">
-  <div class="marca"><span class="selo">%</span><h1>Controle de Rebaixa</h1></div>
-  <button id="btn-instalar" class="btn-instalar oculto" type="button">📲 Instalar</button>
+  <div class="marca">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#2878E5"/><g fill="#fff"><rect x="11" y="13" width="4" height="28" rx="1"/><rect x="18" y="13" width="2" height="28"/><rect x="23" y="13" width="5" height="28" rx="1"/><rect x="31" y="13" width="2" height="28"/><rect x="36" y="13" width="3" height="28" rx="1"/></g><path d="M26 38h24l8 8-8 8H26z" fill="#172B4D" stroke="#2878E5" stroke-width="3" stroke-linejoin="round"/><circle cx="51" cy="46" r="2.4" fill="#fff"/></svg>
+    <h1>CONTROLE <span>DE REBAIXA</span></h1>
+  </div>
+  <button id="btn-instalar" class="btn-instalar oculto" type="button"><i data-lucide="download"></i>Instalar</button>
 </header>
 
+<nav class="menu">
+  <button class="nav ativo" data-aba="produtos" type="button"><i data-lucide="layout-dashboard"></i><span>Painel</span></button>
+  <button class="nav" data-aba="bipar" type="button"><i data-lucide="scan-barcode"></i><span>Lançar</span></button>
+  <button class="nav" data-aba="avisos" type="button"><i data-lucide="bell"></i><span>Avisos</span></button>
+</nav>
+
 <div id="alerta" class="alerta oculto">
-  <b id="alerta-txt"></b>
+  <div class="alerta-t"><i data-lucide="alert-triangle"></i><b id="alerta-txt"></b></div>
   <div class="alerta-btns">
-    <button id="btn-som" type="button">🔔 Tocar alerta</button>
-    <button id="btn-zap" type="button">WhatsApp</button>
+    <button id="btn-som" type="button"><i data-lucide="volume-2"></i>Tocar alerta</button>
+    <button id="btn-zap" type="button"><i data-lucide="message-circle"></i>WhatsApp</button>
   </div>
 </div>
 
 <main>
-  <!-- PRODUTOS -->
+  <!-- PAINEL / PRODUTOS -->
   <section id="aba-produtos" class="aba">
     <div id="resumo" class="resumo"></div>
-    <input type="search" id="busca" placeholder="Buscar por nome ou código">
-    <div id="lista"></div>
+    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="busca" placeholder="Buscar por nome ou código"></div>
+    <div id="lista"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
   </section>
 
-  <!-- BIPAR / LANÇAR -->
+  <!-- LANÇAR -->
   <section id="aba-bipar" class="aba oculto">
-    <h2>Lançar produto</h2>
-    <button id="btn-camera" class="btn-grande" type="button">📷 Bipar com a câmera</button>
+    <div class="titulo"><h2>Lançar produto</h2><p>Bipe o código de barras ou digite manualmente.</p></div>
+    <button id="btn-camera" class="btn-grande" type="button"><i data-lucide="scan-barcode"></i>Bipar com a câmera</button>
     <div id="leitor"></div>
     <div id="dup" class="dup oculto">
-      <b>✅ Este produto já está cadastrado</b>
+      <div class="dup-t"><i data-lucide="circle-check"></i><b>Este produto já está cadastrado</b></div>
       <div id="dup-lista"></div>
       <button id="dup-novo" class="btn-sec" type="button">Lançar outra validade deste produto</button>
     </div>
     <button id="btn-manual" class="btn-link" type="button">ou digitar sem câmera</button>
-    <form id="form-novo" class="form oculto" autocomplete="off">
+    <form id="form-novo" class="form cartao oculto" autocomplete="off">
       <p id="busca-status" class="status oculto"></p>
       <label>Código de barras<input id="n-codigo" inputmode="numeric" placeholder="Opcional"></label>
       <div class="foto-box">
         <img id="n-foto" class="foto-prev oculto" alt="Foto do produto">
-        <button id="btn-foto" class="btn-sec" type="button">📸 Tirar foto</button>
+        <button id="btn-foto" class="btn-sec" type="button"><i data-lucide="camera"></i>Tirar foto</button>
       </div>
       <label>Produto<input id="n-nome" placeholder="Nome do produto" required></label>
       <div class="duas">
@@ -56,35 +67,29 @@
         <label>Quantidade<input id="n-qtd" type="number" min="1" value="1"></label>
       </div>
       <div class="duas iguais">
-        <label>Sem clube (preço 1)<input id="n-p1" inputmode="decimal" placeholder="R$ 0,00"></label>
-        <label>Com clube (preço 2)<input id="n-p2" inputmode="decimal" placeholder="R$ 0,00"></label>
+        <label>Sem clube (preço 1)<input id="n-p1" inputmode="numeric" placeholder="R$ 0,00"></label>
+        <label>Com clube (preço 2)<input id="n-p2" inputmode="numeric" placeholder="R$ 0,00"></label>
       </div>
-      <button class="btn-grande" type="submit">Salvar produto</button>
+      <button class="btn-grande" type="submit"><i data-lucide="check"></i>Salvar produto</button>
     </form>
     <p id="msg" class="msg"></p>
   </section>
 
   <!-- AVISOS -->
   <section id="aba-avisos" class="aba oculto">
-    <h2>Avisos</h2>
-    <div class="form">
+    <div class="titulo"><h2>Avisos</h2><p>Receba o resumo dos produtos que estão vencendo.</p></div>
+    <div class="form cartao">
       <label>WhatsApp que recebe o aviso
         <input id="zap-num" inputmode="tel" placeholder="(27) 99999-9999">
       </label>
-      <button id="btn-salvar-zap" class="btn-grande" type="button">Salvar número</button>
-      <button id="btn-zap2" class="btn-sec" type="button">Enviar resumo agora no WhatsApp</button>
-      <button id="btn-notif" class="btn-sec" type="button">Ativar notificações do celular</button>
-      <button id="btn-cosmos" class="btn-sec" type="button">Testar conexão com o Cosmos</button>
+      <button id="btn-salvar-zap" class="btn-grande" type="button"><i data-lucide="check"></i>Salvar número</button>
+      <button id="btn-zap2" class="btn-sec" type="button"><i data-lucide="message-circle"></i>Enviar resumo agora no WhatsApp</button>
+      <button id="btn-notif" class="btn-sec" type="button"><i data-lucide="bell"></i>Ativar notificações do celular</button>
+      <button id="btn-cosmos" class="btn-sec" type="button"><i data-lucide="plug-zap"></i>Testar conexão com o Cosmos</button>
       <p class="nota">O app avisa com <b>som e faixa na tela</b> sempre que for aberto com produto vencendo em até 3 dias. O WhatsApp abre com a mensagem pronta e você só toca em enviar.</p>
     </div>
   </section>
 </main>
-
-<nav class="menu">
-  <button class="nav ativo" data-aba="produtos" type="button"><i>📋</i>Produtos</button>
-  <button class="nav" data-aba="bipar" type="button"><i>➕</i>Lançar</button>
-  <button class="nav" data-aba="avisos" type="button"><i>🔔</i>Avisos</button>
-</nav>
 
 <input type="file" id="arq-foto" accept="image/*" capture="environment" class="oculto">
 
@@ -93,7 +98,7 @@
     <h2>Editar lançamento</h2>
     <div class="foto-box">
       <img id="e-foto" class="foto-prev oculto" alt="Foto do produto">
-      <button id="btn-foto-e" class="btn-sec" type="button">📸 Tirar foto</button>
+      <button id="btn-foto-e" class="btn-sec" type="button"><i data-lucide="camera"></i>Tirar foto</button>
     </div>
     <label>Produto<input id="e-nome" required></label>
     <div class="duas">
@@ -101,11 +106,11 @@
       <label>Quantidade<input id="e-qtd" type="number" min="1"></label>
     </div>
     <div class="duas iguais">
-      <label>Sem clube (preço 1)<input id="e-p1" inputmode="decimal" placeholder="R$ 0,00"></label>
-      <label>Com clube (preço 2)<input id="e-p2" inputmode="decimal" placeholder="R$ 0,00"></label>
+      <label>Sem clube (preço 1)<input id="e-p1" inputmode="numeric" placeholder="R$ 0,00"></label>
+      <label>Com clube (preço 2)<input id="e-p2" inputmode="numeric" placeholder="R$ 0,00"></label>
     </div>
-    <button class="btn-grande" type="submit">Salvar alterações</button>
-    <button id="e-excluir" class="btn-perigo" type="button">Excluir lançamento</button>
+    <button class="btn-grande" type="submit"><i data-lucide="check"></i>Salvar alterações</button>
+    <button id="e-excluir" class="btn-perigo" type="button"><i data-lucide="trash-2"></i>Excluir lançamento</button>
     <button id="e-cancelar" class="btn-link" type="button">Cancelar</button>
   </form>
 </dialog>
@@ -113,6 +118,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
