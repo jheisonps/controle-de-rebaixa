@@ -240,8 +240,29 @@ async function preencher(codigo) {
       if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
     } else aviso = r.aviso + (r.detalhe ? " (" + r.detalhe.join(" | ") + ")" : "");
   }
-  if (achou) { msg("✔ Produto encontrado. Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
-  else msg((aviso || "Produto não encontrado.") + " Digite o nome e tire a foto.", "aviso");
+  // Segunda fonte (gratuita, sem limite diário): Open Food Facts. Não traz NCM.
+  let avisoOff = "";
+  if (!nome.value || !fotoNova) {
+    const o = await consultarOFF(codigo);
+    if (o.nome || o.foto) {
+      if (o.nome && !nome.value) { nome.value = o.nome; achou = true; }
+      if (o.foto && !fotoNova) { fotoNova = o.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), o.foto); }
+    } else avisoOff = o.aviso;
+  }
+  if (achou) { msg("✔ Produto encontrado. Confira e informe a validade." + (ncm.value ? "" : " NCM não veio: preencha se precisar."), "ok"); $("#n-validade").focus(); }
+  else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto.", "aviso");
+}
+
+async function consultarOFF(codigo) {
+  try {
+    const r = await fetch("https://world.openfoodfacts.org/api/v2/product/" + codigo + ".json?fields=product_name,product_name_pt,generic_name,brands,image_front_small_url,image_front_url");
+    const d = await r.json();
+    if (d.status !== 1 || !d.product) return { aviso: "Não encontrado no Open Food Facts." };
+    const p = d.product, base = (p.product_name_pt || p.product_name || p.generic_name || "").trim();
+    const marca = (p.brands || "").split(",")[0].trim();
+    const nome = base && marca && !base.toLowerCase().includes(marca.toLowerCase()) ? base + " - " + marca : base;
+    return { nome, foto: p.image_front_small_url || p.image_front_url || "" , aviso: "Não encontrado no Open Food Facts." };
+  } catch (e) { return { aviso: "Open Food Facts indisponível." }; }
 }
 
 async function tentar(url, h) {
