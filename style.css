@@ -56,3 +56,13 @@ dialog{border:0;border-radius:16px;width:min(92vw,420px);padding:18px;margin:aut
 dialog::backdrop{background:rgba(0,0,0,.55)}
 #erro-cfg{background:var(--hoje);color:#fff;padding:14px;margin:14px;border-radius:10px;font-weight:600;line-height:1.4}
 @media(prefers-reduced-motion:no-preference){.btn-grande:active,.tile:active{transform:scale(.98)}}
+
+.topo{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.btn-instalar{border:0;border-radius:999px;background:var(--verde);color:#fff;font:800 .8rem system-ui;padding:9px 14px;white-space:nowrap}
+.thumb{flex:0 0 60px;width:60px;object-fit:cover;background:#fff;border-right:1px solid #edf0ee}
+.foto-box{display:flex;align-items:center;gap:12px}
+.foto-box .btn-sec{flex:1;padding:12px}
+.foto-prev{width:84px;height:84px;object-fit:cover;border-radius:10px;border:2px solid #d5dbd7;background:#fff}
+.status{padding:10px 12px;border-radius:10px;font-size:.88rem;font-weight:700;background:#e8eeea;color:var(--verde2)}
+.status.ok{background:#dff3e6;color:#16623a}
+.status.aviso{background:#fff1cc;color:#7a5a00}

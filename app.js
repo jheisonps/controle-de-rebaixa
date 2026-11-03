@@ -73,6 +73,7 @@ function render() {
       const big = d < 0 ? `<b>${-d}</b><span>${-d === 1 ? "dia vencido" : "dias vencido"}</span>` : d === 0 ? "<b>HOJE</b>" : `<b>${d}</b><span>${d === 1 ? "dia" : "dias"}</span>`;
       html += `<div class="card" style="--c:${g.cor}">
         <div class="dias ${d === 0 ? "txt" : ""}">${big}</div>
+        ${i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
         <div class="info"><strong>${esc(i.nome)}</strong>
           <span>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span>
           <span>${i.codigo ? "Cód. " + esc(i.codigo) : "Sem código"}${i.ncm ? " · NCM " + esc(i.ncm) : ""}</span></div>
@@ -104,6 +105,7 @@ function abrirEdicao(id) {
   editandoId = id;
   $("#e-nome").value = i.nome; $("#e-validade").value = fmt(i.validade);
   $("#e-qtd").value = i.quantidade; $("#e-ncm").value = i.ncm || "";
+  fotoEdit = i.foto || ""; mostrarFoto($("#e-foto"), $("#btn-foto-e"), fotoEdit);
   dlg.showModal();
 }
 $("#e-cancelar").addEventListener("click", () => dlg.close());
@@ -115,7 +117,7 @@ $("#form-edit").addEventListener("submit", async (ev) => {
   try {
     await db.collection("lancamentos").doc(editandoId).update({
       nome: $("#e-nome").value.trim(), validade: v,
-      quantidade: parseInt($("#e-qtd").value, 10) || 1, ncm: $("#e-ncm").value.trim()
+      quantidade: parseInt($("#e-qtd").value, 10) || 1, ncm: $("#e-ncm").value.trim(), foto: fotoEdit
     });
     dlg.close();
   } catch (e) { alert("Erro ao salvar: " + e.message); }
@@ -144,7 +146,7 @@ $("#btn-camera").addEventListener("click", async () => {
 });
 $("#btn-manual").addEventListener("click", async () => {
   await pararCamera(); $("#leitor").innerHTML = ""; codigoAtual = null;
-  $("#form-novo").classList.remove("oculto"); $("#n-nome").focus();
+  limparNovo(); $("#form-novo").classList.remove("oculto"); $("#n-nome").focus();
 });
 
 let audioCtx = null;
@@ -158,28 +160,89 @@ function beep(freq = 1500, dur = 0.12, quando = 0) {
   } catch (e) {}
 }
 
+// ---------- Foto ----------
+let fotoNova = "", fotoEdit = "", alvoFoto = "novo";
+function mostrarFoto(img, btn, src) {
+  img.classList.toggle("oculto", !src);
+  if (src) img.src = src; else img.removeAttribute("src");
+  btn.textContent = src ? "📸 Trocar foto" : "📸 Tirar foto";
+}
+function reduzir(file) {
+  return new Promise((ok, err) => {
+    const r = new FileReader();
+    r.onerror = err;
+    r.onload = () => {
+      const im = new Image();
+      im.onerror = err;
+      im.onload = () => {
+        const k = Math.min(1, 400 / Math.max(im.width, im.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        ok(c.toDataURL("image/jpeg", 0.65));
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+$("#btn-foto").addEventListener("click", () => { alvoFoto = "novo"; $("#arq-foto").click(); });
+$("#btn-foto-e").addEventListener("click", () => { alvoFoto = "edit"; $("#arq-foto").click(); });
+$("#arq-foto").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; ev.target.value = "";
+  if (!f) return;
+  try {
+    const url = await reduzir(f);
+    if (alvoFoto === "novo") { fotoNova = url; mostrarFoto($("#n-foto"), $("#btn-foto"), url); }
+    else { fotoEdit = url; mostrarFoto($("#e-foto"), $("#btn-foto-e"), url); }
+  } catch (e) { alert("Não foi possível ler a foto."); }
+});
+
+function limparNovo() {
+  $("#form-novo").reset(); fotoNova = "";
+  mostrarFoto($("#n-foto"), $("#btn-foto"), "");
+  $("#busca-status").className = "status oculto";
+}
+
+// ---------- Busca automática: catálogo próprio e depois Cosmos ----------
+async function preencher(codigo) {
+  const st = $("#busca-status");
+  const msg = (t, c) => { st.textContent = t; st.className = "status " + (c || ""); };
+  const nome = $("#n-nome"), ncm = $("#n-ncm");
+  msg("Buscando produto...");
+  let achou = false;
+  try {
+    const d = await db.collection("produtos").doc(codigo).get();
+    if (d.exists) {
+      const p = d.data();
+      if (p.nome) { nome.value = p.nome; achou = true; }
+      if (p.ncm) ncm.value = p.ncm;
+      if (p.foto) { fotoNova = p.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), p.foto); }
+    }
+  } catch (e) {}
+  if (COSMOS_TOKEN && (!nome.value || !ncm.value || !fotoNova)) {
+    try {
+      const r = await fetch("https://api.cosmos.bluesoft.com.br/gtins/" + codigo + ".json", { headers: { "X-Cosmos-Token": COSMOS_TOKEN } });
+      if (r.ok) {
+        const c = await r.json();
+        if (c.description && !nome.value) { nome.value = c.description; achou = true; }
+        if (c.ncm && c.ncm.code && !ncm.value) ncm.value = c.ncm.code;
+        if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
+      }
+    } catch (e) {}
+  }
+  if (achou) { msg("✔ Produto encontrado. Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
+  else msg(COSMOS_TOKEN ? "Produto não encontrado. Digite o nome e tire a foto." : "Cosmos sem token no firebase-config.js. Digite o nome e tire a foto.", "aviso");
+}
+
 async function onLido(codigo) {
   if (codigoAtual === codigo) return;
   codigoAtual = codigo; beep();
   await pararCamera(); $("#leitor").innerHTML = "";
+  limparNovo();
   $("#form-novo").classList.remove("oculto");
-  $("#n-codigo").value = codigo; $("#n-nome").value = ""; $("#n-ncm").value = ""; $("#n-validade").value = "";
-  $("#msg").textContent = "";
-  try {
-    const d = await db.collection("produtos").doc(codigo).get();
-    if (d.exists) { $("#n-nome").value = d.data().nome; $("#n-ncm").value = d.data().ncm || ""; $("#n-validade").focus(); return; }
-  } catch (e) {}
-  if (!COSMOS_TOKEN) return;
-  $("#msg").textContent = "Buscando nome do produto...";
-  try {
-    const r = await fetch("https://api.cosmos.bluesoft.com.br/gtins/" + codigo + ".json", { headers: { "X-Cosmos-Token": COSMOS_TOKEN } });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.description) $("#n-nome").value = d.description;
-      if (d.ncm && d.ncm.code) $("#n-ncm").value = d.ncm.code;
-    }
-  } catch (e) {}
-  $("#msg").textContent = "";
+  $("#n-codigo").value = codigo; $("#msg").textContent = "";
+  await preencher(codigo);
 }
 
 $("#form-novo").addEventListener("submit", async (ev) => {
@@ -188,12 +251,12 @@ $("#form-novo").addEventListener("submit", async (ev) => {
   const validade = paraISO($("#n-validade").value.trim());
   if (!validade) { $("#msg").textContent = "Validade inválida. Use DD/MM/AAAA."; return; }
   try {
-    if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ncm }, { merge: true });
+    if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ncm, foto: fotoNova }, { merge: true });
     await db.collection("lancamentos").add({
-      codigo, nome, ncm, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
+      codigo, nome, ncm, foto: fotoNova, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
-    ev.target.reset(); ev.target.classList.add("oculto"); codigoAtual = null;
+    limparNovo(); ev.target.classList.add("oculto"); codigoAtual = null;
     $("#msg").textContent = "✅ Produto salvo!";
   } catch (e) { $("#msg").textContent = "Erro ao salvar: " + e.message; }
 });
@@ -253,6 +316,19 @@ $("#btn-notif").addEventListener("click", async () => {
   if (!("Notification" in window)) return alert("Este navegador não suporta notificações.");
   const r = await Notification.requestPermission();
   if (r === "granted") { notificar(); alert("Notificações ativadas."); } else alert("Notificações não permitidas.");
+});
+
+// ---------- Botão instalar ----------
+let promptInstalar = null;
+const jaInstalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+if (!jaInstalado()) $("#btn-instalar").classList.remove("oculto");
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); promptInstalar = e; });
+window.addEventListener("appinstalled", () => $("#btn-instalar").classList.add("oculto"));
+$("#btn-instalar").addEventListener("click", async () => {
+  if (promptInstalar) { promptInstalar.prompt(); await promptInstalar.userChoice; promptInstalar = null; return; }
+  alert(/iphone|ipad|ipod/i.test(navigator.userAgent)
+    ? "No iPhone: toque em Compartilhar e depois em 'Adicionar à Tela de Início'."
+    : "Toque no menu ⋮ do navegador e escolha 'Instalar app' ou 'Adicionar à tela inicial'.");
 });
 
 // ---------- PWA ----------

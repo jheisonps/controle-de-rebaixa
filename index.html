@@ -13,6 +13,7 @@
 <body>
 <header class="topo">
   <div class="marca"><span class="selo">%</span><h1>Controle de Rebaixa</h1></div>
+  <button id="btn-instalar" class="btn-instalar oculto" type="button">📲 Instalar</button>
 </header>
 
 <div id="alerta" class="alerta oculto">
@@ -38,7 +39,12 @@
     <div id="leitor"></div>
     <button id="btn-manual" class="btn-link" type="button">ou digitar sem câmera</button>
     <form id="form-novo" class="form oculto" autocomplete="off">
+      <p id="busca-status" class="status oculto"></p>
       <label>Código de barras<input id="n-codigo" inputmode="numeric" placeholder="Opcional"></label>
+      <div class="foto-box">
+        <img id="n-foto" class="foto-prev oculto" alt="Foto do produto">
+        <button id="btn-foto" class="btn-sec" type="button">📸 Tirar foto</button>
+      </div>
       <label>Produto<input id="n-nome" placeholder="Nome do produto" required></label>
       <div class="duas">
         <label>Validade<input id="n-validade" class="data" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" required></label>
@@ -71,9 +77,15 @@
   <button class="nav" data-aba="avisos" type="button"><i>🔔</i>Avisos</button>
 </nav>
 
+<input type="file" id="arq-foto" accept="image/*" capture="environment" class="oculto">
+
 <dialog id="dlg">
   <form id="form-edit" class="form" method="dialog" autocomplete="off">
     <h2>Editar lançamento</h2>
+    <div class="foto-box">
+      <img id="e-foto" class="foto-prev oculto" alt="Foto do produto">
+      <button id="btn-foto-e" class="btn-sec" type="button">📸 Tirar foto</button>
+    </div>
     <label>Produto<input id="e-nome" required></label>
     <div class="duas">
       <label>Validade<input id="e-validade" class="data" inputmode="numeric" maxlength="10" required></label>
