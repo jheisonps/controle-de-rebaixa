@@ -220,11 +220,12 @@ async function preencher(codigo) {
   const nome = $("#n-nome"), ncm = $("#n-ncm");
   msg("Buscando produto...");
   let achou = false;
+  const fontes = [];
   try {
     const d = await db.collection("produtos").doc(codigo).get();
     if (d.exists) {
       const p = d.data();
-      if (p.nome) { nome.value = p.nome; achou = true; }
+      if (p.nome) { nome.value = p.nome; achou = true; fontes.push("seu catálogo"); }
       if (p.ncm) ncm.value = p.ncm;
       if (p.foto) { fotoNova = p.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), p.foto); }
     }
@@ -234,7 +235,7 @@ async function preencher(codigo) {
   else if (!nome.value || !ncm.value || !fotoNova) {
     const r = await consultarCosmos(codigo);
     if (r.dados) {
-      const c = r.dados;
+      const c = r.dados; fontes.push("Cosmos");
       if (c.description && !nome.value) { nome.value = c.description; achou = true; }
       if (c.ncm && c.ncm.code && !ncm.value) ncm.value = c.ncm.code;
       if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
@@ -245,24 +246,37 @@ async function preencher(codigo) {
   if (!nome.value || !fotoNova) {
     const o = await consultarOFF(codigo);
     if (o.nome || o.foto) {
+      fontes.push(o.fonte);
       if (o.nome && !nome.value) { nome.value = o.nome; achou = true; }
       if (o.foto && !fotoNova) { fotoNova = o.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), o.foto); }
     } else avisoOff = o.aviso;
   }
-  if (achou) { msg("✔ Produto encontrado. Confira e informe a validade." + (ncm.value ? "" : " NCM não veio: preencha se precisar."), "ok"); $("#n-validade").focus(); }
+  if (achou) { msg("✔ Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade." + (ncm.value ? "" : " NCM não veio: preencha se precisar."), "ok"); $("#n-validade").focus(); }
   else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto.", "aviso");
 }
 
+// Bases gratuitas da mesma família (mesma API): alimentos, produtos em geral, higiene/beleza e pet
+const BASES_OFF = [
+  ["Open Food Facts", "world.openfoodfacts.org"],
+  ["Open Products Facts", "world.openproductsfacts.org"],
+  ["Open Beauty Facts", "world.openbeautyfacts.org"],
+  ["Open Pet Food Facts", "world.openpetfoodfacts.org"]
+];
 async function consultarOFF(codigo) {
-  try {
-    const r = await fetch("https://world.openfoodfacts.org/api/v2/product/" + codigo + ".json?fields=product_name,product_name_pt,generic_name,brands,image_front_small_url,image_front_url");
-    const d = await r.json();
-    if (d.status !== 1 || !d.product) return { aviso: "Não encontrado no Open Food Facts." };
-    const p = d.product, base = (p.product_name_pt || p.product_name || p.generic_name || "").trim();
-    const marca = (p.brands || "").split(",")[0].trim();
-    const nome = base && marca && !base.toLowerCase().includes(marca.toLowerCase()) ? base + " - " + marca : base;
-    return { nome, foto: p.image_front_small_url || p.image_front_url || "" , aviso: "Não encontrado no Open Food Facts." };
-  } catch (e) { return { aviso: "Open Food Facts indisponível." }; }
+  const res = await Promise.all(BASES_OFF.map(async ([rotulo, host]) => {
+    try {
+      const r = await fetch("https://" + host + "/api/v2/product/" + codigo + ".json?fields=product_name,product_name_pt,generic_name,brands,image_front_small_url,image_front_url");
+      const d = await r.json();
+      if (d.status !== 1 || !d.product) return { ok: true };
+      const p = d.product, base = (p.product_name_pt || p.product_name || p.generic_name || "").trim();
+      const marca = (p.brands || "").split(",")[0].trim();
+      const nome = base && marca && !base.toLowerCase().includes(marca.toLowerCase()) ? base + " - " + marca : base;
+      return { ok: true, nome, foto: p.image_front_small_url || p.image_front_url || "", fonte: rotulo };
+    } catch (e) { return { ok: false }; }
+  }));
+  const achado = res.find((x) => x.nome) || res.find((x) => x.foto);
+  if (achado) return achado;
+  return { aviso: res.every((x) => !x.ok) ? "Open Food Facts indisponível (sem conexão ou bloqueio)." : "Não encontrado no Open Food Facts nem nas bases irmãs (produtos, higiene, pet)." };
 }
 
 async function tentar(url, h) {
