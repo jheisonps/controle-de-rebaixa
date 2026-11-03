@@ -1,4 +1,3 @@
-// Ponte entre o app e o Cosmos (evita o bloqueio do navegador). Rota: /cosmos?codigo=...
 export async function onRequestGet({ request, env }) {
   const u = new URL(request.url);
   const codigo = (u.searchParams.get("codigo") || "").replace(/\D/g, "");
