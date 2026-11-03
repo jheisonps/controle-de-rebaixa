@@ -55,7 +55,10 @@
         <label>Validade<input id="n-validade" class="data" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" required></label>
         <label>Quantidade<input id="n-qtd" type="number" min="1" value="1"></label>
       </div>
-      <label>NCM<input id="n-ncm" inputmode="numeric" placeholder="Preenche sozinho, se achar"></label>
+      <div class="duas iguais">
+        <label>Sem clube (preço 1)<input id="n-p1" inputmode="decimal" placeholder="R$ 0,00"></label>
+        <label>Com clube (preço 2)<input id="n-p2" inputmode="decimal" placeholder="R$ 0,00"></label>
+      </div>
       <button class="btn-grande" type="submit">Salvar produto</button>
     </form>
     <p id="msg" class="msg"></p>
@@ -97,7 +100,10 @@
       <label>Validade<input id="e-validade" class="data" inputmode="numeric" maxlength="10" required></label>
       <label>Quantidade<input id="e-qtd" type="number" min="1"></label>
     </div>
-    <label>NCM<input id="e-ncm" inputmode="numeric"></label>
+    <div class="duas iguais">
+      <label>Sem clube (preço 1)<input id="e-p1" inputmode="decimal" placeholder="R$ 0,00"></label>
+      <label>Com clube (preço 2)<input id="e-p2" inputmode="decimal" placeholder="R$ 0,00"></label>
+    </div>
     <button class="btn-grande" type="submit">Salvar alterações</button>
     <button id="e-excluir" class="btn-perigo" type="button">Excluir lançamento</button>
     <button id="e-cancelar" class="btn-link" type="button">Cancelar</button>

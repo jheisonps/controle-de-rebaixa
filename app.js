@@ -26,6 +26,21 @@ function diasPara(iso) {
 }
 const fmt = (iso) => iso.split("-").reverse().join("/");
 const curtaData = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
+const brl = (n) => "R$ " + n.toFixed(2).replace(".", ",");
+function textoPrecos(i) {
+  const p = [];
+  if (i.precoSemClube != null) p.push("Sem clube " + brl(i.precoSemClube));
+  if (i.precoComClube != null) p.push("Com clube " + brl(i.precoComClube));
+  return p.join(" · ");
+}
+function lerPreco(v) {
+  v = String(v || "").replace(/[^\d.,]/g, "");
+  if (!v) return null;
+  if (v.includes(",")) v = v.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(v);
+  return isNaN(n) ? null : Math.round(n * 100) / 100;
+}
+const precoTexto = (n) => (n == null ? "" : String(n).replace(".", ","));
 
 // ---------- Máscara e validação de data ----------
 function mascara(el) {
@@ -78,7 +93,8 @@ function render() {
         ${i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
         <div class="info"><strong>${esc(i.nome)}</strong>
           <span>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span>
-          <span>${i.codigo ? "Cód. " + esc(i.codigo) : "Sem código"}${i.ncm ? " · NCM " + esc(i.ncm) : ""}</span></div>
+          ${textoPrecos(i) ? `<span class="precos">${textoPrecos(i)}</span>` : ""}
+          <span>${i.codigo ? "Cód. " + esc(i.codigo) : "Sem código"}</span></div>
         <div class="acoes"><button data-id="${i.id}" data-a="e" type="button" aria-label="Editar">✏️</button><button data-id="${i.id}" data-a="x" type="button" aria-label="Excluir">🗑️</button></div>
       </div>`;
     });
@@ -106,7 +122,7 @@ function abrirEdicao(id) {
   const i = itens.find((x) => x.id === id); if (!i) return;
   editandoId = id;
   $("#e-nome").value = i.nome; $("#e-validade").value = fmt(i.validade);
-  $("#e-qtd").value = i.quantidade; $("#e-ncm").value = i.ncm || "";
+  $("#e-qtd").value = i.quantidade; $("#e-p1").value = precoTexto(i.precoSemClube); $("#e-p2").value = precoTexto(i.precoComClube);
   fotoEdit = i.foto || ""; mostrarFoto($("#e-foto"), $("#btn-foto-e"), fotoEdit);
   dlg.showModal();
 }
@@ -117,10 +133,13 @@ $("#form-edit").addEventListener("submit", async (ev) => {
   const v = paraISO($("#e-validade").value.trim());
   if (!v) return alert("Validade inválida. Use DD/MM/AAAA.");
   try {
+    const atual = itens.find((x) => x.id === editandoId), nome = $("#e-nome").value.trim();
     await db.collection("lancamentos").doc(editandoId).update({
-      nome: $("#e-nome").value.trim(), validade: v,
-      quantidade: parseInt($("#e-qtd").value, 10) || 1, ncm: $("#e-ncm").value.trim(), foto: fotoEdit
+      nome, validade: v, quantidade: parseInt($("#e-qtd").value, 10) || 1, foto: fotoEdit,
+      precoSemClube: lerPreco($("#e-p1").value), precoComClube: lerPreco($("#e-p2").value)
     });
+    // mantém o catálogo (memória do app) igual à correção feita aqui
+    if (atual && atual.codigo) await db.collection("produtos").doc(atual.codigo).set({ nome, ...(fotoEdit ? { foto: fotoEdit } : {}) }, { merge: true });
     dlg.close();
   } catch (e) { alert("Erro ao salvar: " + e.message); }
 });
@@ -147,9 +166,12 @@ async function iniciarCamera(prefixo = "") {
     verbose: false
   });
   try {
-    // sem "qrbox": lê o quadro inteiro, então o código pode estar de lado ou de cabeça para baixo
-    await leitor.start({ facingMode: "environment" }, { fps: 15 }, onLido, () => {});
-    $("#msg").textContent = prefixo + "Aponte para o código de barras (pode estar de lado ou invertido).";
+    // visor pequeno (16:9) com faixa de leitura horizontal: lê o código normal ou de cabeça para baixo
+    await leitor.start({ facingMode: "environment" }, {
+      fps: 15, aspectRatio: 1.777778,
+      qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(h * 0.55) })
+    }, onLido, () => {});
+    $("#msg").textContent = prefixo + "Aponte para o código de barras (pode estar de cabeça para baixo).";
   } catch (e) { $("#msg").textContent = "Não foi possível abrir a câmera: " + e; }
 }
 $("#btn-camera").addEventListener("click", () => iniciarCamera());
@@ -171,6 +193,7 @@ function beep(freq = 1500, dur = 0.12, quando = 0) {
 
 // ---------- Foto ----------
 let fotoNova = "", fotoEdit = "", alvoFoto = "novo";
+let ultimoBuscado = "", autoPreenchido = false;
 function mostrarFoto(img, btn, src) {
   img.classList.toggle("oculto", !src);
   if (src) img.src = src; else img.removeAttribute("src");
@@ -208,7 +231,7 @@ $("#arq-foto").addEventListener("change", async (ev) => {
 });
 
 function limparNovo() {
-  $("#form-novo").reset(); fotoNova = "";
+  $("#form-novo").reset(); fotoNova = ""; ultimoBuscado = ""; autoPreenchido = false;
   mostrarFoto($("#n-foto"), $("#btn-foto"), "");
   $("#busca-status").className = "status oculto";
 }
@@ -217,7 +240,7 @@ function limparNovo() {
 async function preencher(codigo) {
   const st = $("#busca-status");
   const msg = (t, c) => { st.textContent = t; st.className = "status " + (c || ""); };
-  const nome = $("#n-nome"), ncm = $("#n-ncm");
+  const nome = $("#n-nome");
   msg("Buscando produto...");
   let achou = false;
   const fontes = [];
@@ -225,23 +248,21 @@ async function preencher(codigo) {
     const d = await db.collection("produtos").doc(codigo).get();
     if (d.exists) {
       const p = d.data();
-      if (p.nome) { nome.value = p.nome; achou = true; fontes.push("seu catálogo"); }
-      if (p.ncm) ncm.value = p.ncm;
-      if (p.foto) { fotoNova = p.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), p.foto); }
+      if (p.nome) { if (!nome.value) nome.value = p.nome; achou = true; fontes.push("seu catálogo"); }
+      if (p.foto && !fotoNova) { fotoNova = p.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), p.foto); }
     }
   } catch (e) {}
   let aviso = "";
   if (!COSMOS_TOKEN) aviso = "Cosmos sem token no firebase-config.js.";
-  else if (!nome.value || !ncm.value || !fotoNova) {
+  else if (!nome.value || !fotoNova) {
     const r = await consultarCosmos(codigo);
     if (r.dados) {
       const c = r.dados; fontes.push("Cosmos");
       if (c.description && !nome.value) { nome.value = c.description; achou = true; }
-      if (c.ncm && c.ncm.code && !ncm.value) ncm.value = c.ncm.code;
       if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
     } else aviso = r.aviso + (r.detalhe ? " (" + r.detalhe.join(" | ") + ")" : "");
   }
-  // Segunda fonte (gratuita, sem limite diário): Open Food Facts. Não traz NCM.
+  // Segunda fonte (gratuita, sem limite diário): Open Food Facts.
   let avisoOff = "";
   if (!nome.value || !fotoNova) {
     const o = await consultarOFF(codigo);
@@ -251,8 +272,9 @@ async function preencher(codigo) {
       if (o.foto && !fotoNova) { fotoNova = o.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), o.foto); }
     } else avisoOff = o.aviso;
   }
-  if (achou) { msg("✔ Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade." + (ncm.value ? "" : " NCM não veio: preencha se precisar."), "ok"); $("#n-validade").focus(); }
+  if (achou) { msg("✔ Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
   else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto.", "aviso");
+  autoPreenchido = achou;
 }
 
 // Bases gratuitas da mesma família (mesma API): alimentos, produtos em geral, higiene/beleza e pet
@@ -332,9 +354,22 @@ function mostrarDup(codigo, ja) {
   $("#form-novo").classList.add("oculto");
   $("#dup-lista").innerHTML = ja.map((i) => `<div class="dup-item"><span><b>${esc(i.nome)}</b><br>Vence em ${fmt(i.validade)} · ${i.quantidade} un</span><button data-id="${i.id}" type="button">✏️ Editar</button></div>`).join("");
   $("#dup-lista").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { fecharDup(); abrirEdicao(b.dataset.id); }));
-  $("#dup-novo").onclick = () => { fecharDup(); $("#form-novo").classList.remove("oculto"); $("#n-codigo").value = codigo; preencher(codigo); };
+  $("#dup-novo").onclick = () => { fecharDup(); $("#form-novo").classList.remove("oculto"); $("#n-codigo").value = codigo; ultimoBuscado = codigo; preencher(codigo); };
   $("#dup").classList.remove("oculto");
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+}
+
+// Fluxo único para código bipado ou digitado: avisa se já existe; senão busca nome e foto
+async function processarCodigo(codigo, manual) {
+  if (manual) {
+    if (codigo === ultimoBuscado) return;
+    if (autoPreenchido) { $("#n-nome").value = ""; fotoNova = ""; mostrarFoto($("#n-foto"), $("#btn-foto"), ""); }
+  }
+  ultimoBuscado = codigo;
+  const ja = itens.filter((i) => i.codigo === codigo).sort((a, b) => a.validade.localeCompare(b.validade));
+  if (ja.length) { somPremio(); mostrarDup(codigo, ja); return; }
+  if (!manual) beep();
+  await preencher(codigo);
 }
 
 async function onLido(codigo) {
@@ -342,23 +377,28 @@ async function onLido(codigo) {
   codigoAtual = codigo;
   await pararCamera(); $("#leitor").innerHTML = "";
   limparNovo(); $("#msg").textContent = "";
-  const ja = itens.filter((i) => i.codigo === codigo).sort((a, b) => a.validade.localeCompare(b.validade));
-  if (ja.length) { somPremio(); mostrarDup(codigo, ja); return; }
-  beep();
   $("#form-novo").classList.remove("oculto");
   $("#n-codigo").value = codigo;
-  await preencher(codigo);
+  await processarCodigo(codigo, false);
 }
+
+// Digitou o código: busca sozinho ao completar 13 dígitos, ao sair do campo ou ao apertar Enter
+const campoCodigo = $("#n-codigo");
+const buscarManual = () => { const c = campoCodigo.value.replace(/\D/g, ""); if (c.length >= 8) processarCodigo(c, true); };
+campoCodigo.addEventListener("input", () => { const n = campoCodigo.value.replace(/\D/g, "").length; if (n === 13 || n === 14) buscarManual(); });
+campoCodigo.addEventListener("change", buscarManual);
+campoCodigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); buscarManual(); } });
 
 $("#form-novo").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim(), ncm = $("#n-ncm").value.trim();
+  const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim();
   const validade = paraISO($("#n-validade").value.trim());
   if (!validade) { $("#msg").textContent = "Validade inválida. Use DD/MM/AAAA."; return; }
   try {
-    if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ncm, foto: fotoNova }, { merge: true });
+    if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ...(fotoNova ? { foto: fotoNova } : {}) }, { merge: true });
     await db.collection("lancamentos").add({
-      codigo, nome, ncm, foto: fotoNova, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
+      codigo, nome, foto: fotoNova, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
+      precoSemClube: lerPreco($("#n-p1").value), precoComClube: lerPreco($("#n-p2").value),
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
     limparNovo(); ev.target.classList.add("oculto"); codigoAtual = null;
