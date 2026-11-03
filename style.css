@@ -66,3 +66,8 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .status{padding:10px 12px;border-radius:10px;font-size:.88rem;font-weight:700;background:#e8eeea;color:var(--verde2)}
 .status.ok{background:#dff3e6;color:#16623a}
 .status.aviso{background:#fff1cc;color:#7a5a00}
+
+.dup{background:#fff1cc;border:2px solid var(--urgente);border-radius:12px;padding:14px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.dup>b{font-size:1.05rem;color:#7a4a00}
+.dup-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border-radius:10px;padding:10px 12px;font-size:.9rem;line-height:1.4}
+.dup-item button{border:0;border-radius:8px;background:var(--verde);color:#fff;font-weight:800;padding:10px 12px;white-space:nowrap}
