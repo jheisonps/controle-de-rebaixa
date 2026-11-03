@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Controle de Rebaixa</title>
+<meta name="theme-color" content="#ffd60a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <div class="marca"><span class="selo">%</span><h1>Controle de Rebaixa</h1></div>
+</header>
+
+<div id="alerta" class="alerta oculto">
+  <b id="alerta-txt"></b>
+  <div class="alerta-btns">
+    <button id="btn-som" type="button">🔔 Tocar alerta</button>
+    <button id="btn-zap" type="button">WhatsApp</button>
+  </div>
+</div>
+
+<main>
+  <!-- PRODUTOS -->
+  <section id="aba-produtos" class="aba">
+    <div id="resumo" class="resumo"></div>
+    <input type="search" id="busca" placeholder="Buscar por nome ou código">
+    <div id="lista"></div>
+  </section>
+
+  <!-- BIPAR / LANÇAR -->
+  <section id="aba-bipar" class="aba oculto">
+    <h2>Lançar produto</h2>
+    <button id="btn-camera" class="btn-grande" type="button">📷 Bipar com a câmera</button>
+    <div id="leitor"></div>
+    <button id="btn-manual" class="btn-link" type="button">ou digitar sem câmera</button>
+    <form id="form-novo" class="form oculto" autocomplete="off">
+      <label>Código de barras<input id="n-codigo" inputmode="numeric" placeholder="Opcional"></label>
+      <label>Produto<input id="n-nome" placeholder="Nome do produto" required></label>
+      <div class="duas">
+        <label>Validade<input id="n-validade" class="data" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" required></label>
+        <label>Quantidade<input id="n-qtd" type="number" min="1" value="1"></label>
+      </div>
+      <label>NCM<input id="n-ncm" inputmode="numeric" placeholder="Preenche sozinho, se achar"></label>
+      <button class="btn-grande" type="submit">Salvar produto</button>
+    </form>
+    <p id="msg" class="msg"></p>
+  </section>
+
+  <!-- AVISOS -->
+  <section id="aba-avisos" class="aba oculto">
+    <h2>Avisos</h2>
+    <div class="form">
+      <label>WhatsApp que recebe o aviso
+        <input id="zap-num" inputmode="tel" placeholder="(27) 99999-9999">
+      </label>
+      <button id="btn-salvar-zap" class="btn-grande" type="button">Salvar número</button>
+      <button id="btn-zap2" class="btn-sec" type="button">Enviar resumo agora no WhatsApp</button>
+      <button id="btn-notif" class="btn-sec" type="button">Ativar notificações do celular</button>
+      <p class="nota">O app avisa com <b>som e faixa na tela</b> sempre que for aberto com produto vencendo em até 3 dias. O WhatsApp abre com a mensagem pronta e você só toca em enviar.</p>
+    </div>
+  </section>
+</main>
+
+<nav class="menu">
+  <button class="nav ativo" data-aba="produtos" type="button"><i>📋</i>Produtos</button>
+  <button class="nav" data-aba="bipar" type="button"><i>➕</i>Lançar</button>
+  <button class="nav" data-aba="avisos" type="button"><i>🔔</i>Avisos</button>
+</nav>
+
+<dialog id="dlg">
+  <form id="form-edit" class="form" method="dialog" autocomplete="off">
+    <h2>Editar lançamento</h2>
+    <label>Produto<input id="e-nome" required></label>
+    <div class="duas">
+      <label>Validade<input id="e-validade" class="data" inputmode="numeric" maxlength="10" required></label>
+      <label>Quantidade<input id="e-qtd" type="number" min="1"></label>
+    </div>
+    <label>NCM<input id="e-ncm" inputmode="numeric"></label>
+    <button class="btn-grande" type="submit">Salvar alterações</button>
+    <button id="e-excluir" class="btn-perigo" type="button">Excluir lançamento</button>
+    <button id="e-cancelar" class="btn-link" type="button">Cancelar</button>
+  </form>
+</dialog>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
