@@ -48,7 +48,9 @@ document.querySelectorAll(".nav").forEach((b) => b.addEventListener("click", () 
   document.querySelectorAll(".nav").forEach((x) => x.classList.toggle("ativo", x === b));
   document.querySelectorAll(".aba").forEach((a) => a.classList.add("oculto"));
   $("#aba-" + b.dataset.aba).classList.remove("oculto");
-  if (b.dataset.aba !== "bipar") pararCamera();
+  if (b.dataset.aba === "bipar") {
+    if (!leitor && $("#form-novo").classList.contains("oculto") && $("#dup").classList.contains("oculto")) iniciarCamera();
+  } else pararCamera();
 }));
 
 // ---------- Lista de produtos ----------
@@ -134,7 +136,7 @@ let leitor = null, codigoAtual = null;
 async function pararCamera() {
   if (leitor) { try { await leitor.stop(); leitor.clear(); } catch (e) {} leitor = null; }
 }
-$("#btn-camera").addEventListener("click", async () => {
+async function iniciarCamera(prefixo = "") {
   await pararCamera(); fecharDup(); codigoAtual = null;
   $("#msg").textContent = "Abrindo câmera...";
   $("#leitor").innerHTML = '<div id="qr" style="width:100%"></div>';
@@ -147,9 +149,10 @@ $("#btn-camera").addEventListener("click", async () => {
   try {
     // sem "qrbox": lê o quadro inteiro, então o código pode estar de lado ou de cabeça para baixo
     await leitor.start({ facingMode: "environment" }, { fps: 15 }, onLido, () => {});
-    $("#msg").textContent = "Aponte para o código de barras (pode estar de lado ou invertido).";
+    $("#msg").textContent = prefixo + "Aponte para o código de barras (pode estar de lado ou invertido).";
   } catch (e) { $("#msg").textContent = "Não foi possível abrir a câmera: " + e; }
-});
+}
+$("#btn-camera").addEventListener("click", () => iniciarCamera());
 $("#btn-manual").addEventListener("click", async () => {
   await pararCamera(); $("#leitor").innerHTML = ""; codigoAtual = null;
   fecharDup(); limparNovo(); $("#form-novo").classList.remove("oculto"); $("#n-nome").focus();
@@ -235,28 +238,60 @@ async function preencher(codigo) {
       if (c.description && !nome.value) { nome.value = c.description; achou = true; }
       if (c.ncm && c.ncm.code && !ncm.value) ncm.value = c.ncm.code;
       if (c.thumbnail && !fotoNova) { fotoNova = c.thumbnail; mostrarFoto($("#n-foto"), $("#btn-foto"), c.thumbnail); }
-    } else aviso = r.aviso;
+    } else aviso = r.aviso + (r.detalhe ? " (" + r.detalhe.join(" | ") + ")" : "");
   }
   if (achou) { msg("✔ Produto encontrado. Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
   else msg((aviso || "Produto não encontrado.") + " Digite o nome e tire a foto.", "aviso");
 }
 
-async function consultarCosmos(codigo) {
-  const h = { "X-Cosmos-Token": COSMOS_TOKEN };
-  let r = null;
-  try { r = await fetch("/cosmos?codigo=" + codigo, { headers: h }); } catch (e) {}
-  if (!r || (r.status === 404 && !(r.headers.get("content-type") || "").includes("json"))) {
-    try { r = await fetch("https://api.cosmos.bluesoft.com.br/gtins/" + codigo + ".json", { headers: h }); }
-    catch (e) { return { aviso: "Sem acesso ao Cosmos (bloqueio do navegador). Crie o arquivo functions/cosmos.js (veja as instruções)." }; }
-  }
-  if (r.ok) { try { return { dados: await r.json() }; } catch (e) { return { aviso: "Resposta inválida do Cosmos." }; } }
-  if (r.status === 404) return { aviso: "Produto não encontrado no Cosmos." };
-  if (r.status === 401 || r.status === 403) return { aviso: "Token do Cosmos inválido." };
-  if (r.status === 429) return { aviso: "Limite diário do Cosmos atingido." };
-  return { aviso: "Cosmos indisponível (erro " + r.status + ")." };
+async function tentar(url, h) {
+  try {
+    const r = await fetch(url, { headers: h });
+    const txt = await r.text();
+    let dados = null; try { dados = JSON.parse(txt); } catch (e) {}
+    return { status: r.status, dados, txt: txt.slice(0, 40).replace(/\s+/g, " ") };
+  } catch (e) { return { erro: String(e.message || e) }; }
 }
+async function consultarCosmos(codigo) {
+  const h = { "X-Cosmos-Token": COSMOS_TOKEN }, det = [];
+  const rotas = [["ponte", "/cosmos?codigo=" + codigo], ["direto", "https://api.cosmos.bluesoft.com.br/gtins/" + codigo + ".json"]];
+  for (const [nome, url] of rotas) {
+    const r = await tentar(url, h);
+    if (r.dados) {
+      if (r.status === 200) return { dados: r.dados };
+      if (r.status === 404) return { aviso: "Produto não encontrado no Cosmos." };
+      if (r.status === 401 || r.status === 403) return { aviso: "Token do Cosmos inválido." };
+      if (r.status === 429) return { aviso: "Limite diário do Cosmos atingido." };
+      return { aviso: "Cosmos indisponível (erro " + r.status + ")." };
+    }
+    det.push(nome + ": " + (r.erro ? "falhou (" + r.erro + ")" : "HTTP " + r.status + ", não é JSON (" + r.txt + ")"));
+  }
+  return { aviso: "Não consegui falar com o Cosmos.", detalhe: det };
+}
+$("#btn-cosmos").addEventListener("click", async () => {
+  if (!COSMOS_TOKEN) return alert("Falta o token do Cosmos no firebase-config.js.");
+  const r = await consultarCosmos("7891000100103");
+  alert(r.dados || /não encontrado/.test(r.aviso || "") ? "✔ Cosmos conectado." : r.aviso + "\n" + (r.detalhe || []).join("\n"));
+});
 
-function beepDup() { beep(380, 0.22, 0); beep(260, 0.22, 0.28); beep(380, 0.22, 0.56); }
+function nota(freq, dur, quando, tipo = "sine", vol = 0.22) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime + quando;
+    o.type = tipo; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) {}
+}
+// Som de "prêmio": arpejo ascendente e acorde final
+function somPremio() {
+  [[523.25, 0], [659.25, 0.1], [783.99, 0.2], [1046.5, 0.3]].forEach(([f, q]) => nota(f, 0.25, q, "triangle"));
+  [1046.5, 1318.5, 1568].forEach((f) => nota(f, 0.7, 0.46, "sine", 0.16));
+  nota(2093, 0.5, 0.55, "sine", 0.1);
+}
 function fecharDup() { $("#dup").classList.add("oculto"); codigoAtual = null; }
 function mostrarDup(codigo, ja) {
   $("#form-novo").classList.add("oculto");
@@ -273,7 +308,7 @@ async function onLido(codigo) {
   await pararCamera(); $("#leitor").innerHTML = "";
   limparNovo(); $("#msg").textContent = "";
   const ja = itens.filter((i) => i.codigo === codigo).sort((a, b) => a.validade.localeCompare(b.validade));
-  if (ja.length) { beepDup(); mostrarDup(codigo, ja); return; }
+  if (ja.length) { somPremio(); mostrarDup(codigo, ja); return; }
   beep();
   $("#form-novo").classList.remove("oculto");
   $("#n-codigo").value = codigo;
@@ -292,7 +327,7 @@ $("#form-novo").addEventListener("submit", async (ev) => {
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
     limparNovo(); ev.target.classList.add("oculto"); codigoAtual = null;
-    $("#msg").textContent = "✅ Produto salvo!";
+    iniciarCamera("✅ Produto salvo! ");
   } catch (e) { $("#msg").textContent = "Erro ao salvar: " + e.message; }
 });
 
