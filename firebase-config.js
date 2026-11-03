@@ -8,4 +8,4 @@ const FIREBASE_CONFIG = {
   appId: "1:178959717073:web:adeee5818751fec3712bf0"
 };
 // Token da Cosmos (opcional): preenche nome/NCM sozinho ao bipar. Deixe vazio se não tiver.
-const COSMOS_TOKEN = "";
+const COSMOS_TOKEN = "VrSl47q7wkL8xXqUISv-7w";
