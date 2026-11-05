@@ -24,6 +24,7 @@
 <nav class="menu">
   <button class="nav ativo" data-aba="produtos" type="button"><i data-lucide="layout-dashboard"></i><span>Painel</span></button>
   <button class="nav" data-aba="bipar" type="button"><i data-lucide="scan-barcode"></i><span>Lançar</span></button>
+  <button class="nav" data-aba="mercafacil" type="button"><i data-lucide="list-checks"></i><span>Mercafacil</span></button>
   <button class="nav" data-aba="avisos" type="button"><i data-lucide="bell"></i><span>Avisos</span></button>
 </nav>
 
@@ -55,6 +56,7 @@
     </div>
     <button id="btn-manual" class="btn-link" type="button">ou digitar sem câmera</button>
     <form id="form-novo" class="form cartao oculto" autocomplete="off">
+      <p id="mf-info" class="status oculto"></p>
       <p id="busca-status" class="status oculto"></p>
       <label>Código de barras<input id="n-codigo" inputmode="numeric" placeholder="Opcional"></label>
       <div class="foto-box">
@@ -73,6 +75,24 @@
       <button class="btn-grande" type="submit"><i data-lucide="check"></i>Salvar produto</button>
     </form>
     <p id="msg" class="msg"></p>
+  </section>
+
+  <!-- MERCAFACIL -->
+  <section id="aba-mercafacil" class="aba oculto">
+    <div class="titulo"><h2>Mercafacil</h2><p id="mf-meta"></p></div>
+    <details class="cartao imp" id="mf-imp">
+      <summary><i data-lucide="file-spreadsheet"></i>Importar planilha do Mercafacil</summary>
+      <div class="form">
+        <p class="nota">Baixe a planilha da campanha no site do Mercafacil e escolha o arquivo aqui. O app lê só nome, SKU, EAN, campanha, preço 1 e preço 2, e ignora as linhas repetidas.</p>
+        <button id="mf-escolher" class="btn-grande" type="button"><i data-lucide="upload"></i>Escolher planilha (.xlsx)</button>
+        <input type="file" id="mf-arq" accept=".xlsx,.xls,.csv" class="oculto">
+        <p id="mf-import-msg" class="status oculto"></p>
+        <div id="mf-previa"></div>
+      </div>
+    </details>
+    <div id="mf-resumo" class="kpis"></div>
+    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Buscar por nome, SKU ou código"></div>
+    <div id="mf-lista"></div>
   </section>
 
   <!-- AVISOS -->
@@ -113,6 +133,29 @@
     <button id="e-excluir" class="btn-perigo" type="button"><i data-lucide="trash-2"></i>Excluir lançamento</button>
     <button id="e-cancelar" class="btn-link" type="button">Cancelar</button>
   </form>
+</dialog>
+
+<dialog id="dlg-mf">
+  <div class="form">
+    <h2 id="mf-nome"></h2>
+    <p class="nota" id="mf-det"></p>
+    <div class="chips" id="mf-precos"></div>
+    <div id="mf-lancs"></div>
+    <p id="mf-aviso" class="status oculto"></p>
+    <div id="mf-leitor"></div>
+    <div id="mf-salvar-box" class="conf-box oculto">
+      <p id="mf-salvar-txt"></p>
+      <button id="mf-sim" class="btn-grande" type="button"><i data-lucide="check"></i>Sim, salvar este código</button>
+      <button id="mf-nao" class="btn-sec" type="button">Não</button>
+    </div>
+    <div id="mf-acoes" class="form">
+      <button id="mf-bipar" class="btn-grande" type="button"><i data-lucide="scan-barcode"></i>Bipar para conferir</button>
+      <button id="mf-digitar" class="btn-link" type="button">ou digitar o código de barras</button>
+      <div id="mf-manual" class="duas iguais oculto"><input id="mf-cod" inputmode="numeric" placeholder="Código de barras"><button id="mf-conferir" class="btn-sec" type="button">Conferir</button></div>
+      <button id="mf-limpar" class="btn-link oculto" type="button">Apagar o código de barras salvo deste produto</button>
+    </div>
+    <button id="mf-fechar" class="btn-link" type="button">Fechar</button>
+  </div>
 </dialog>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>

@@ -3,6 +3,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 let db = null, itens = [], filtro = "todos", editandoId = null, jaTocou = false;
+let itensMF = [], metaMF = null, filtroMF = "todos", mfAtual = null;
 
 if (FIREBASE_CONFIG.apiKey === "COLE_AQUI") {
   document.body.insertAdjacentHTML("afterbegin", '<div id="erro-cfg">Falta configurar o Firebase. Abra o arquivo <b>firebase-config.js</b> e cole os dados do seu projeto (veja o LEIA-ME.md, passo 1).</div>');
@@ -56,7 +57,7 @@ function mascara(el) {
 document.querySelectorAll(".data").forEach(mascara);
 
 // Textos digitados sempre em MAIÚSCULAS
-document.querySelectorAll("#n-nome, #e-nome, #busca").forEach((el) => {
+document.querySelectorAll("#n-nome, #e-nome, #busca, #mf-busca").forEach((el) => {
   el.setAttribute("autocapitalize", "characters");
   el.addEventListener("input", () => {
     const p = el.selectionStart;
@@ -114,7 +115,7 @@ function render() {
       const d = diasPara(i.validade);
       const status = d < 0 ? `Vencido há ${-d} ${-d === 1 ? "dia" : "dias"}` : d === 0 ? "Vence hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
       const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
-      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "");
+      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
       html += `<article class="card" style="--c:${g.cor}">${thumb}
         <div class="info"><strong>${esc(i.nome)}</strong>
           <div class="meta">${ico("calendar-days")}<b>${fmt(i.validade)}</b>${ico("package")}<b>${i.quantidade} un</b></div>
@@ -136,10 +137,18 @@ $("#busca").addEventListener("input", render);
 if (db) {
   db.collection("lancamentos").onSnapshot((s) => {
     itens = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    render(); tentarSomAoAbrir();
+    render(); renderMF(); tentarSomAoAbrir();
   }, (e) => {
     $("#lista").innerHTML = `<div class="vazio">Erro ao ler o banco: ${esc(e.message)}<br>Confira as Regras do Firestore (LEIA-ME, passo 1).</div>`;
   });
+}
+
+if (db) {
+  db.collection("mercafacil").onSnapshot((s) => {
+    itensMF = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderMF(); render();
+  }, () => {});
+  db.collection("meta").doc("mercafacil").onSnapshot((d) => { metaMF = d.exists ? d.data() : null; renderMF(); }, () => {});
 }
 
 // ---------- Editar / excluir ----------
@@ -164,6 +173,8 @@ $("#form-edit").addEventListener("submit", async (ev) => {
       nome, validade: v, quantidade: parseInt($("#e-qtd").value, 10) || 1, foto: fotoEdit,
       precoSemClube: lerPreco($("#e-p1").value), precoComClube: lerPreco($("#e-p2").value)
     });
+    const mfx = atual && mfDeLanc(atual);
+    if (mfx && nome !== (mfx.nome || "").toUpperCase()) await db.collection("mercafacil").doc(mfx.id).set({ nome, nomeEditado: true }, { merge: true });
     // mantém o catálogo (memória do app) igual à correção feita aqui
     if (atual && atual.codigo) await db.collection("produtos").doc(atual.codigo).set({ nome, ...(fotoEdit ? { foto: fotoEdit } : {}) }, { merge: true });
     dlg.close();
@@ -257,7 +268,7 @@ $("#arq-foto").addEventListener("change", async (ev) => {
 });
 
 function limparNovo() {
-  $("#form-novo").reset(); fotoNova = ""; ultimoBuscado = ""; autoPreenchido = false;
+  $("#form-novo").reset(); mfAtual = null; mostrarMFInfo(null); fotoNova = ""; ultimoBuscado = ""; autoPreenchido = false;
   mostrarFoto($("#n-foto"), $("#btn-foto"), "");
   $("#busca-status").className = "status oculto";
 }
@@ -270,6 +281,13 @@ async function preencher(codigo) {
   msg("Buscando produto...");
   let achou = false;
   const fontes = [];
+  const mf = acharMF(codigo);
+  if (mf) {
+    mfAtual = mf; mostrarMFInfo(mf); achou = true; fontes.push("Mercafacil");
+    if (!nome.value && mf.nome) nome.value = mf.nome.toUpperCase();
+    if (!$("#n-p1").value && mf.p1 != null) $("#n-p1").value = precoTexto(mf.p1);
+    if (!$("#n-p2").value && mf.p2 != null) $("#n-p2").value = precoTexto(mf.p2);
+  }
   try {
     const d = await db.collection("produtos").doc(codigo).get();
     if (d.exists) {
@@ -298,8 +316,9 @@ async function preencher(codigo) {
       if (o.foto && !fotoNova) { fotoNova = o.foto; mostrarFoto($("#n-foto"), $("#btn-foto"), o.foto); }
     } else avisoOff = o.aviso;
   }
-  if (achou) { msg("Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade.", "ok"); $("#n-validade").focus(); }
-  else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto.", "aviso");
+  const extraMF = !mfAtual && itensMF.length ? " ⚠ Este código NÃO está na lista do Mercafacil." : "";
+  if (achou) { msg("Encontrado (" + fontes.join(" + ") + "). Confira e informe a validade." + extraMF, extraMF ? "aviso" : "ok"); $("#n-validade").focus(); }
+  else msg([aviso || "Produto não encontrado no Cosmos.", avisoOff].filter(Boolean).join(" ") + " Digite o nome e tire a foto." + extraMF, "aviso");
   autoPreenchido = achou;
 }
 
@@ -417,13 +436,15 @@ campoCodigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.prev
 
 $("#form-novo").addEventListener("submit", async (ev) => {
   ev.preventDefault();
+  const mf = mfAtual;
   const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim().toUpperCase();
   const validade = paraISO($("#n-validade").value.trim());
   if (!validade) { $("#msg").textContent = "Validade inválida. Use DD/MM/AAAA."; return; }
   try {
     if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ...(fotoNova ? { foto: fotoNova } : {}) }, { merge: true });
+    if (mf && nome && nome !== (mf.nome || "").toUpperCase()) await db.collection("mercafacil").doc(mf.id).set({ nome, nomeEditado: true }, { merge: true });
     await db.collection("lancamentos").add({
-      codigo, nome, foto: fotoNova, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
+      codigo, nome, mfId: mf ? mf.id : null, foto: fotoNova, validade, quantidade: parseInt($("#n-qtd").value, 10) || 1,
       precoSemClube: lerPreco($("#n-p1").value), precoComClube: lerPreco($("#n-p2").value),
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -488,6 +509,289 @@ $("#btn-notif").addEventListener("click", async () => {
   const r = await Notification.requestPermission();
   if (r === "granted") { notificar(); alert("Notificações ativadas."); } else alert("Notificações não permitidas.");
 });
+
+// ---------- Mercafacil ----------
+const norm = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const soNum = (c) => String(c ?? "").replace(/\D/g, "").replace(/^0+/, "");
+const brlN = (v) => (v == null ? "-" : brl(v));
+// EAN vazio, curto ou igual ao SKU = não é código de barras de verdade
+const suspeito = (m) => { const e = soNum(m.ean); return !e || e.length < 8 || e === soNum(m.sku); };
+const precisaConfirmar = (m) => suspeito(m) && !m.codigoReal;
+function codigosMF(m) {
+  const s = new Set();
+  if (!suspeito(m)) s.add(soNum(m.ean));
+  if (m.codigoReal) s.add(soNum(m.codigoReal));
+  return s;
+}
+function acharMF(codigo) {
+  const c = soNum(codigo); if (!c) return null;
+  const l = itensMF.filter((m) => codigosMF(m).has(c));
+  return l.find((m) => !m.saiu) || l[0] || null;
+}
+const lancsDe = (m) => itens.filter((i) => i.mfId === m.id || codigosMF(m).has(soNum(i.codigo)));
+const mfDeLanc = (i) => (i.mfId && itensMF.find((m) => m.id === i.mfId)) || acharMF(i.codigo);
+
+function mostrarMFInfo(m) {
+  const el = $("#mf-info");
+  if (!m) { el.className = "status oculto"; return; }
+  el.textContent = m.saiu ? "⚠ Mercafacil: este produto saiu da campanha na última planilha." : "✔ Mercafacil · SKU " + m.sku + " · nome e preços vieram da planilha.";
+  el.className = "status " + (m.saiu ? "aviso" : "ok");
+}
+
+// ----- lista -----
+const TILES_MF = [
+  ["falta", "Falta lançar", "package-open", "var(--urgente)"],
+  ["lancado", "Já lançados", "circle-check", "var(--ok)"],
+  ["saiu", "Saíram da campanha", "log-out", "var(--hoje)"],
+  ["conf", "Código a confirmar", "scan-barcode", "#7B4FD6"]
+];
+function renderMF() {
+  const lista = $("#mf-lista"); if (!lista) return;
+  $("#mf-meta").textContent = metaMF && metaMF.importadoEm
+    ? "Última importação: " + new Date(metaMF.importadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) + " · " + itensMF.filter((m) => !m.saiu).length + " produtos na campanha"
+    : "Nenhuma planilha importada ainda.";
+  const busca = norm($("#mf-busca").value);
+  const dados = itensMF.map((m) => {
+    const l = lancsDe(m);
+    return { m, l, cat: m.saiu ? "saiu" : l.length ? "lancado" : "falta", conf: !m.saiu && precisaConfirmar(m) };
+  });
+  const cont = { falta: 0, lancado: 0, saiu: 0, conf: 0 };
+  dados.forEach((x) => { cont[x.cat]++; if (x.conf) cont.conf++; });
+  $("#mf-resumo").innerHTML = TILES_MF.map(([k, nome, ic, cor]) =>
+    `<button class="tile ${filtroMF === k ? "sel" : ""}" style="--c:${cor}" data-f="${k}" type="button"><span class="ti">${ico(ic)}</span><strong>${cont[k]}</strong><span>${nome}</span></button>`).join("");
+  document.querySelectorAll("#mf-resumo .tile").forEach((t) => t.addEventListener("click", () => {
+    filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
+  }));
+  const passa = (x) => (!busca || norm(x.m.nome + " " + x.m.sku + " " + x.m.ean + " " + (x.m.codigoReal || "")).includes(busca))
+    && (filtroMF === "todos" || (filtroMF === "conf" ? x.conf : x.cat === filtroMF));
+  const GR = [["falta", "Falta lançar", "var(--urgente)"], ["lancado", "Já lançados", "var(--ok)"], ["saiu", "Saíram da campanha", "var(--hoje)"]];
+  const ultimo = metaMF && metaMF.ultimoLote, novaImp = metaMF && (metaMF.importacoes || 0) > 1;
+  let html = "";
+  GR.forEach(([k, nome, cor]) => {
+    const l = dados.filter((x) => x.cat === k && passa(x)).sort((a, b) => (a.m.nome || "").localeCompare(b.m.nome || "", "pt-BR"));
+    if (!l.length) return;
+    html += `<div class="grupo" style="--c:${cor}">${nome}<small>${l.length}</small></div>`;
+    l.forEach((x) => { html += cartaoMF(x); });
+  });
+  lista.innerHTML = html || `<div class="vazio">${ico(itensMF.length ? "search-x" : "file-spreadsheet")}<b>${itensMF.length ? "Nenhum produto encontrado" : "Nenhuma planilha importada"}</b><span>${itensMF.length ? "Tente outro nome ou código." : "No computador, abra “Importar planilha do Mercafacil” e escolha o arquivo."}</span></div>`;
+  lista.querySelectorAll(".card").forEach((c) => c.addEventListener("click", () => abrirConferencia(c.dataset.id)));
+  icones();
+
+  function cartaoMF(x) {
+    const m = x.m;
+    const cor = x.conf ? "#7B4FD6" : x.cat === "falta" ? "var(--urgente)" : x.cat === "lancado" ? "var(--ok)" : "var(--hoje)";
+    const qtd = x.l.reduce((s, i) => s + (i.quantidade || 0), 0);
+    const pill = x.cat === "saiu" ? "Saiu da campanha" : x.cat === "lancado" ? `Lançado · ${qtd} un` : x.conf ? "Confirmar código" : "Falta lançar";
+    const dif = x.cat === "lancado" && x.l.some((i) => (i.precoSemClube != null && m.p1 != null && i.precoSemClube !== m.p1) || (i.precoComClube != null && m.p2 != null && i.precoComClube !== m.p2));
+    const chips = (m.p1 != null ? `<span class="chip">Sem clube ${brl(m.p1)}</span>` : "") + (m.p2 != null ? `<span class="chip clube">Com clube ${brl(m.p2)}</span>` : "")
+      + (x.conf ? '<span class="chip conf">EAN igual ao SKU</span>' : "")
+      + (novaImp && m.criadoLote === ultimo ? '<span class="chip novo">NOVO</span>' : "")
+      + (dif ? '<span class="chip aviso">Preço diferente do lançamento</span>' : "")
+      + (x.cat === "saiu" && x.l.length ? '<span class="chip saiu">Tem lançamento: rever</span>' : "");
+    return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}">
+      <div class="info"><strong>${esc(m.nome)}</strong>
+        <div class="meta">SKU <b>${esc(m.sku || "-")}</b>${suspeito(m) ? "" : " · EAN <b>" + esc(m.ean) + "</b>"}</div>
+        <div class="chips">${chips}</div></div>
+      <div class="lado"><span class="pill">${pill}</span></div></article>`;
+  }
+}
+$("#mf-busca").addEventListener("input", renderMF);
+
+// ----- conferência (toque no nome + bipar) -----
+let mfConf = null, mfPendente = null, leitorMF = null, travaMF = false;
+const dlgMF = $("#dlg-mf");
+function avisoMF(t, c) { const el = $("#mf-aviso"); el.textContent = t || ""; el.className = "status " + (c || "") + (t ? "" : " oculto"); }
+async function pararLeitorMF() {
+  if (leitorMF) { try { await leitorMF.stop(); leitorMF.clear(); } catch (e) {} leitorMF = null; }
+  $("#mf-leitor").innerHTML = "";
+}
+async function iniciarLeitorMF() {
+  await pararLeitorMF(); travaMF = false; $("#mf-salvar-box").classList.add("oculto"); avisoMF("");
+  $("#mf-leitor").innerHTML = '<div id="qr-mf" style="width:100%"></div>';
+  const F = Html5QrcodeSupportedFormats;
+  leitorMF = new Html5Qrcode("qr-mf", {
+    formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF],
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false
+  });
+  try {
+    await leitorMF.start({ facingMode: "environment" }, {
+      fps: 15, aspectRatio: 1.777778,
+      qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(h * 0.55) })
+    }, (cod) => {
+      if (!leitorMF || travaMF) return;
+      travaMF = true; beep();
+      pararLeitorMF().then(() => conferirCodigo(cod));
+    }, () => {});
+  } catch (e) { avisoMF("Não foi possível abrir a câmera: " + e + ". Use “digitar o código”.", "aviso"); leitorMF = null; }
+}
+function abrirConferencia(id) {
+  const m = itensMF.find((x) => x.id === id); if (!m) return;
+  mfConf = m; mfPendente = null;
+  $("#mf-nome").textContent = m.nome;
+  $("#mf-det").innerHTML = `SKU <b>${esc(m.sku || "-")}</b> · EAN <b>${esc(m.ean || "-")}</b>` + (m.codigoReal ? ` · Código salvo <b>${esc(m.codigoReal)}</b>` : "");
+  $("#mf-precos").innerHTML = (m.p1 != null ? `<span class="chip">Sem clube ${brl(m.p1)}</span>` : "") + (m.p2 != null ? `<span class="chip clube">Com clube ${brl(m.p2)}</span>` : "");
+  const l = lancsDe(m);
+  $("#mf-lancs").innerHTML = l.length ? '<div class="dup-t"><b>Já lançado:</b></div>' + l.sort((a, b) => a.validade.localeCompare(b.validade)).map((i) =>
+    `<div class="dup-item"><span>Vence em <b>${fmt(i.validade)}</b> · ${i.quantidade} un</span><button data-id="${i.id}" type="button">${ico("pencil")}Editar</button></div>`).join("") : "";
+  $("#mf-lancs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { dlgMF.close(); abrirEdicao(b.dataset.id); }));
+  $("#mf-salvar-box").classList.add("oculto"); $("#mf-manual").classList.add("oculto"); $("#mf-cod").value = "";
+  $("#mf-limpar").classList.toggle("oculto", !m.codigoReal);
+  $("#mf-acoes").classList.toggle("oculto", !!m.saiu);
+  if (m.saiu) avisoMF("Este produto saiu da campanha na última planilha." + (l.length ? " Reveja o lançamento acima." : ""), "aviso");
+  else if (precisaConfirmar(m)) avisoMF("No Mercafacil este produto está com EAN igual ao SKU. Bipe a embalagem: o app pergunta se quer salvar o código de barras.", "aviso");
+  else avisoMF("");
+  dlgMF.showModal(); icones();
+  if (!m.saiu) iniciarLeitorMF();
+}
+function conferirCodigo(cod) {
+  const m = mfConf, limpo = String(cod).replace(/\D/g, ""), c = soNum(limpo);
+  if (!m || !c) return;
+  if (codigosMF(m).has(c)) { dlgMF.close(); abrirLancamentoMF(m, limpo); return; }
+  const outro = acharMF(limpo);
+  if (outro && outro.id !== m.id) { avisoMF(`❌ Código diferente. O código ${limpo} é do produto “${outro.nome}”, não deste.`, "aviso"); return; }
+  if (precisaConfirmar(m)) {
+    mfPendente = limpo;
+    $("#mf-salvar-txt").textContent = `Salvar o código de barras ${limpo} para “${m.nome}” (que está com EAN e SKU iguais)?`;
+    $("#mf-salvar-box").classList.remove("oculto"); avisoMF(""); return;
+  }
+  avisoMF(`❌ Código diferente (${limpo}). Este não é o código de barras de “${m.nome}” no Mercafacil, ou o produto não está na lista.`, "aviso");
+}
+$("#mf-bipar").addEventListener("click", iniciarLeitorMF);
+$("#mf-digitar").addEventListener("click", () => { pararLeitorMF(); $("#mf-manual").classList.remove("oculto"); $("#mf-cod").focus(); });
+$("#mf-conferir").addEventListener("click", () => conferirCodigo($("#mf-cod").value));
+$("#mf-cod").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); conferirCodigo($("#mf-cod").value); } });
+$("#mf-nao").addEventListener("click", () => { mfPendente = null; $("#mf-salvar-box").classList.add("oculto"); iniciarLeitorMF(); });
+$("#mf-sim").addEventListener("click", async () => {
+  if (!mfConf || !mfPendente) return;
+  try {
+    await db.collection("mercafacil").doc(mfConf.id).set({ codigoReal: mfPendente }, { merge: true });
+    mfConf.codigoReal = mfPendente;
+    const m = mfConf, cod = mfPendente; dlgMF.close(); abrirLancamentoMF(m, cod);
+  } catch (e) { alert("Erro ao salvar o código: " + e.message); }
+});
+$("#mf-limpar").addEventListener("click", async () => {
+  if (!mfConf || !confirm("Apagar o código de barras salvo deste produto?")) return;
+  try {
+    await db.collection("mercafacil").doc(mfConf.id).update({ codigoReal: firebase.firestore.FieldValue.delete() });
+    delete mfConf.codigoReal; abrirConferencia(mfConf.id);
+  } catch (e) { alert("Erro: " + e.message); }
+});
+$("#mf-fechar").addEventListener("click", () => dlgMF.close());
+dlgMF.addEventListener("close", pararLeitorMF);
+
+// código conferido: abre o formulário já preenchido (falta só validade e quantidade)
+function abrirLancamentoMF(m, cod) {
+  limparNovo(); fecharDup(); mfAtual = m;
+  $("#leitor").innerHTML = ""; $("#msg").textContent = "";
+  $("#form-novo").classList.remove("oculto");
+  $("#n-codigo").value = cod; $("#n-nome").value = (m.nome || "").toUpperCase();
+  $("#n-p1").value = precoTexto(m.p1); $("#n-p2").value = precoTexto(m.p2);
+  ultimoBuscado = cod; autoPreenchido = true;
+  document.querySelector('.nav[data-aba="bipar"]').click();
+  mostrarMFInfo(m);
+  preencher(cod);
+  $("#n-validade").focus();
+}
+
+// ----- importação da planilha -----
+let importacao = null;
+const setImp = (t, c) => { const el = $("#mf-import-msg"); el.textContent = t || ""; el.className = "status " + (c || "") + (t ? "" : " oculto"); };
+function carregarXLSX() {
+  return new Promise((ok, err) => {
+    if (window.XLSX) return ok();
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = ok; s.onerror = () => err(new Error("Não consegui carregar o leitor de Excel (sem internet?)."));
+    document.head.appendChild(s);
+  });
+}
+const numPreco = (v) => (typeof v === "number" ? Math.round(v * 100) / 100 : lerPreco(v));
+$("#mf-escolher").addEventListener("click", () => $("#mf-arq").click());
+$("#mf-arq").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) lerPlanilha(f); });
+
+async function lerPlanilha(f) {
+  importacao = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha...");
+  try {
+    await carregarXLSX();
+    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+    const h = rows.findIndex((r, i) => i < 10 && r.some((c) => norm(c) === "sku"));
+    if (h < 0) throw new Error("Não achei a coluna SKU. Esta é a planilha de campanha do Mercafacil?");
+    const cab = rows[h].map(norm), col = (...n) => cab.findIndex((c) => n.includes(c));
+    const ix = { nome: col("nome produto", "nome do produto", "produto"), sku: col("sku"), ean: col("ean"), camp: col("nome campanha", "campanha"), p1: col("preco 1"), p2: col("preco 2") };
+    const rot = { nome: "Nome produto", sku: "SKU", ean: "EAN", p1: "Preço 1", p2: "Preço 2" };
+    const faltam = Object.keys(rot).filter((k) => ix[k] < 0).map((k) => rot[k]);
+    if (faltam.length) throw new Error("Faltam colunas na planilha: " + faltam.join(", ") + ".");
+    const mapa = new Map(); let lidas = 0, semCodigo = 0;
+    rows.slice(h + 1).forEach((r) => {
+      if (!r.some((c) => String(c).trim() !== "")) return;
+      lidas++;
+      const sku = String(r[ix.sku] ?? "").trim().replace(/\.0$/, "");
+      const ean = String(r[ix.ean] ?? "").trim().replace(/\D/g, "");
+      if (!sku && !ean) { semCodigo++; return; }
+      const id = (sku || ean).replace(/[\/\s]/g, "_");
+      mapa.set(id, { id, sku, ean, nome: String(r[ix.nome] ?? "").trim(), campanha: ix.camp >= 0 ? String(r[ix.camp] ?? "").trim() : "", p1: numPreco(r[ix.p1]), p2: numPreco(r[ix.p2]) });
+    });
+    if (!mapa.size) throw new Error("A planilha não tem produtos.");
+    const antigos = new Map(itensMF.map((m) => [m.id, m]));
+    const novos = [], iguais = [], mudou = [], voltaram = [], saiu = [];
+    mapa.forEach((n) => {
+      const o = antigos.get(n.id);
+      if (!o) { novos.push(n); return; }
+      if (o.saiu) voltaram.push(n);
+      const mot = [];
+      if (o.p1 !== n.p1 || o.p2 !== n.p2) mot.push(`preço ${brlN(o.p1)}/${brlN(o.p2)} → ${brlN(n.p1)}/${brlN(n.p2)}`);
+      if (o.ean !== n.ean) mot.push(`EAN ${o.ean || "-"} → ${n.ean || "-"}`);
+      if (mot.length) mudou.push({ n, motivo: mot.join("; ") }); else if (!o.saiu) iguais.push(n);
+    });
+    itensMF.filter((m) => !m.saiu && !mapa.has(m.id)).forEach((m) => saiu.push(m));
+    importacao = { mapa, antigos, novos, iguais, mudou, voltaram, saiu, arquivo: f.name };
+    setImp(`Planilha lida: ${lidas} linhas, ${mapa.size} produtos únicos` + (lidas - mapa.size - semCodigo > 0 ? `, ${lidas - mapa.size - semCodigo} linhas repetidas ignoradas` : "") + (semCodigo ? `, ${semCodigo} sem SKU/EAN ignoradas` : "") + ".", "ok");
+    previaImport();
+  } catch (e) { setImp("Erro: " + e.message, "aviso"); }
+}
+function previaImport() {
+  const imp = importacao; if (!imp) return;
+  const G = [
+    ["novos", "novo(s) produto(s) adicionado(s)", "var(--ok)", (n) => n.nome],
+    ["voltaram", "voltou/voltaram para a campanha", "var(--azul)", (n) => n.nome],
+    ["mudou", "com mudança de preço ou código", "var(--urgente)", (x) => x.n.nome + " — " + x.motivo],
+    ["saiu", "saiu/saíram da campanha", "var(--hoje)", (m) => m.nome + (lancsDe(m).length ? " (TEM LANÇAMENTO: rever)" : "")]
+  ];
+  const mudancas = G.reduce((s, g) => s + imp[g[0]].length, 0);
+  let html = G.filter((g) => imp[g[0]].length).map(([k, t, cor, f]) =>
+    `<details class="pg" style="--c:${cor}" ${k === "novos" || k === "saiu" ? "open" : ""}><summary><b>${imp[k].length}</b> ${t}</summary><ul>${imp[k].map((x) => `<li>${esc(f(x))}</li>`).join("")}</ul></details>`).join("");
+  html += `<p class="nota">${imp.iguais.length} produto(s) já cadastrado(s), sem mudança.</p>`;
+  html += mudancas
+    ? `<button id="mf-confirmar" class="btn-grande" type="button"><i data-lucide="check"></i>Confirmar importação</button><button id="mf-cancelar" class="btn-link" type="button">Cancelar</button>`
+    : `<p class="status ok">Nenhuma novidade: todos os produtos já estão cadastrados.</p>`;
+  $("#mf-previa").innerHTML = html; icones();
+  const c = $("#mf-confirmar"); if (c) c.addEventListener("click", confirmarImportacao);
+  const x = $("#mf-cancelar"); if (x) x.addEventListener("click", () => { importacao = null; $("#mf-previa").innerHTML = ""; setImp(""); });
+}
+async function confirmarImportacao() {
+  const imp = importacao; if (!imp) return;
+  if (imp.saiu.length > 5 && imp.saiu.length >= imp.antigos.size * 0.5 && !confirm(`${imp.saiu.length} produtos vão sair da campanha. Esta é mesmo a planilha da campanha certa?`)) return;
+  const btn = $("#mf-confirmar"); btn.disabled = true; btn.textContent = "Importando...";
+  try {
+    const lote = new Date().toISOString(), ops = [], col = db.collection("mercafacil");
+    const base = (n) => ({ sku: n.sku, ean: n.ean, nomeMF: n.nome, p1: n.p1, p2: n.p2, campanha: n.campanha, saiu: false, atualizadoLote: lote });
+    imp.novos.forEach((n) => ops.push([col.doc(n.id), { ...base(n), nome: n.nome, criadoLote: lote }]));
+    imp.mudou.concat(imp.voltaram.map((n) => ({ n }))).forEach(({ n }) => {
+      const o = imp.antigos.get(n.id);
+      ops.push([col.doc(n.id), { ...base(n), ...(o && o.nomeEditado ? {} : { nome: n.nome }) }]);
+    });
+    imp.saiu.forEach((m) => ops.push([col.doc(m.id), { saiu: true, saiuLote: lote }]));
+    const vistos = new Map(); ops.forEach(([r, d]) => vistos.set(r.path, [r, { ...(vistos.get(r.path) ? vistos.get(r.path)[1] : {}), ...d }]));
+    const final = [...vistos.values()];
+    for (let i = 0; i < final.length; i += 400) {
+      const b = db.batch(); final.slice(i, i + 400).forEach(([r, d]) => b.set(r, d, { merge: true })); await b.commit();
+    }
+    await db.collection("meta").doc("mercafacil").set({ ultimoLote: lote, importadoEm: lote, importacoes: ((metaMF && metaMF.importacoes) || 0) + 1, arquivo: imp.arquivo, total: imp.mapa.size }, { merge: true });
+    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} que saiu(íram).`, "ok");
+    importacao = null; $("#mf-previa").innerHTML = "";
+  } catch (e) { setImp("Erro ao importar: " + e.message, "aviso"); btn.disabled = false; btn.textContent = "Confirmar importação"; }
+}
 
 // ---------- Botão instalar ----------
 let promptInstalar = null;
