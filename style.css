@@ -37,13 +37,6 @@ main{max-width:720px;margin:0 auto;padding:16px}
 .hero span{font-size:.85rem;color:#C9D6EC}
 .hero-btn{display:flex;align-items:center;gap:8px;border:0;border-radius:12px;background:var(--azul);color:#fff;font:700 .9rem Inter,system-ui;padding:13px 16px;transition:.15s;flex:none}
 .hero-btn:active{background:var(--azul2);transform:scale(.97)}
-.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
-.tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:1.5px solid transparent;border-radius:16px;padding:12px 14px;background:#fff;box-shadow:var(--sombra);font:inherit;color:var(--tinta);text-align:left;transition:.15s}
-.tile .ti{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--c);color:#fff;margin-bottom:6px}
-.tile strong{font-size:1.7rem;font-weight:800;line-height:1;color:var(--tinta)}
-.tile span:last-child{font-size:.78rem;color:var(--cinza);font-weight:600}
-.tile.sel{border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent),var(--sombra)}
-.tile:active{transform:scale(.97)}
 .busca-box{position:relative;margin-bottom:12px}
 .busca-box svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--cinza);width:18px;height:18px}
 .busca-box input{padding-left:42px}
@@ -117,7 +110,6 @@ dialog::backdrop{background:rgba(23,43,77,.55)}
   .nav{flex:none;flex-direction:row;gap:12px;padding:13px 14px;font-size:.92rem}
   main{max-width:980px}
   .alerta{max-width:948px;margin:12px 16px 0 246px;left:auto}
-  .kpis{grid-template-columns:repeat(4,1fr)}
   #lista,#mf-lista{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grupo{grid-column:1/-1}
 }
 
@@ -154,3 +146,36 @@ details.imp[open] summary{margin-bottom:14px}
 .acoes button{width:34px;height:34px}
 .acoes .feito{background:#E6F6EE;color:var(--ok)}
 .chip.conferir{background:#FFF4DE;color:#8A5A00}
+
+/* quadradinhos de urgência: uma linha só, com a cor e o nome dentro */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:0;border-radius:12px;padding:7px 2px;background:var(--c);color:#fff;font:inherit;min-width:0;box-shadow:var(--sombra);transition:.15s}
+.tile strong{font-size:1.15rem;font-weight:800;line-height:1.1;color:#fff}
+.tile span{font-size:.64rem;font-weight:700;line-height:1.1;white-space:nowrap}
+.kpis:has(.sel) .tile:not(.sel){opacity:.5}
+.tile.sel{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--c)}
+.tile:active{transform:scale(.96)}
+.grupo{margin:10px 0 2px}
+/* cartão de lançamento compacto */
+.card.lanc{flex-direction:column;align-items:stretch;gap:5px;padding:8px 10px}
+.lanc .nome{font-size:.9rem;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase}
+.lanc .corpo{display:flex;gap:8px;align-items:stretch}
+.lanc .thumb{flex:0 0 52px;width:52px;height:auto;min-height:58px;align-self:stretch;border-radius:10px}
+.lanc .col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:2px}
+.lanc .l1{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.lanc .dt{display:flex;align-items:center;gap:5px;font-size:.88rem;white-space:nowrap}
+.lanc .dt svg{width:14px;height:14px;color:var(--cinza)}
+.lanc .dt b{font-weight:800}
+.lanc .ctl{display:flex;align-items:center;gap:6px}
+.lanc .qtd{margin-left:0;gap:4px}
+.lanc .qtd b{min-width:32px;font-size:.82rem}
+.lanc .ck{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:#EEF1F6;color:#9AA5B8;padding:0;transition:.15s}
+.lanc .ck svg{width:16px;height:16px}
+.lanc .ck.feito{background:#E6F6EE;color:var(--ok)}
+.lanc .ck.velho{background:#FFF4DE;color:#C98A00}
+.lanc .l2{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.lanc .cod{flex:1;min-width:0;font-size:.65rem;color:var(--cinza);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lanc .cod b{color:var(--tinta);font-weight:700;letter-spacing:.2px}
+.lanc .l3{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.lanc .l3 .chip{font-size:.66rem;padding:2px 6px}
+.lanc .l2 .pill{flex:none;font-size:.66rem;padding:3px 8px}

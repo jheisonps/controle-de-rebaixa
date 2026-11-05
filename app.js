@@ -45,7 +45,7 @@ const precoTexto = (n) => (n == null ? "" : n.toFixed(2).replace(".", ","));
 const ico = (n) => `<i data-lucide="${n}"></i>`;
 function icones() { try { lucide.createIcons(); } catch (e) {} }
 const ICONE = { hoje: "alert-triangle", urgente: "clock", atencao: "calendar-days", ok: "check" };
-const ROTULO = { hoje: "Vencidos / hoje", urgente: "1 a 3 dias", atencao: "4 a 7 dias", ok: "Mais de 7 dias" };
+const ROTULO = { hoje: "Vencido/hoje", urgente: "1 a 3 dias", atencao: "4 a 7 dias", ok: "+7 dias" };
 
 // ---------- Máscara e validação de data ----------
 function mascara(el) {
@@ -96,7 +96,7 @@ function render() {
   const busca = $("#busca").value.trim().toLowerCase();
   const cont = {};
   GRUPOS.forEach((g) => { cont[g.k] = itens.filter((i) => g.t(diasPara(i.validade))).length; });
-  $("#resumo").innerHTML = '<div class="kpis">' + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><span class="ti">${ico(ICONE[g.k])}</span><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
+  $("#resumo").innerHTML = '<div class="kpis">' + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
   document.querySelectorAll(".tile").forEach((t) => t.addEventListener("click", () => {
     filtro = filtro === t.dataset.f ? "todos" : t.dataset.f; render();
   }));
@@ -109,16 +109,20 @@ function render() {
     html += `<div class="grupo" style="--c:${g.cor}">${g.nome}<small>${lista.length}</small></div>`;
     lista.forEach((i) => {
       const d = diasPara(i.validade);
-      const status = d < 0 ? `Vencido há ${-d} ${-d === 1 ? "dia" : "dias"}` : d === 0 ? "Vence hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
+      const status = d < 0 ? `Venceu há ${-d}d` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
       const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
-      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "") + (precisaConferir(i) ? '<span class="chip conferir">Conferir</span>' : "");
-      html += `<article class="card" data-id="${i.id}" style="--c:${g.cor}">${thumb}
-        <div class="info"><strong>${esc(i.nome)}</strong>
-          <div class="meta">${ico("calendar-days")}<b>${fmt(i.validade)}</b><span class="qtd"><button data-a="-" type="button" aria-label="Diminuir">−</button><b>${i.quantidade} un</b><button data-a="+" type="button" aria-label="Aumentar">+</button></span></div>
-          ${chips ? `<div class="chips">${chips}</div>` : ""}</div>
-        <div class="lado"><span class="pill">${status}</span>
-          <div class="acoes"><button class="${baseConf(i) === hojeISO() ? "feito" : ""}" data-a="ok" type="button" aria-label="Conferido hoje">${ico("circle-check")}</button><button class="del" data-a="x" type="button" aria-label="Excluir">${ico("trash-2")}</button></div></div>
-      </article>`;
+      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${precoTexto(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${precoTexto(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
+      const ck = baseConf(i) === hojeISO() ? "feito" : precisaConferir(i) ? "velho" : "";
+      html += `<article class="card lanc" data-id="${i.id}" style="--c:${g.cor}">
+        <strong class="nome">${esc(i.nome)}</strong>
+        <div class="corpo">${thumb}
+          <div class="col">
+            <div class="l1"><span class="dt">${ico("calendar-days")}<b>${fmt(i.validade)}</b></span>
+              <span class="ctl"><button class="ck ${ck}" data-a="ok" type="button" aria-label="Conferido">${ico("circle-check")}</button><span class="qtd"><button data-a="-" type="button" aria-label="Diminuir">−</button><b>${i.quantidade} un</b><button data-a="+" type="button" aria-label="Aumentar">+</button></span></span></div>
+            <div class="l2"><span class="cod">${i.codigo ? `COD. BARRA: <b>${esc(i.codigo)}</b>` : ""}</span><span class="pill">${status}</span></div>
+            ${chips ? `<div class="l3">${chips}</div>` : ""}
+          </div>
+        </div></article>`;
     });
   });
   $("#lista").innerHTML = html || `<div class="vazio">${ico(itens.length ? "search-x" : "package-open")}<b>${itens.length ? "Nenhum produto encontrado" : "Nenhum produto lançado ainda"}</b><span>${itens.length ? "Tente outro nome ou código." : "Toque em Lançar para cadastrar o primeiro."}</span></div>`;
@@ -561,9 +565,9 @@ function mostrarMFInfo(m) {
 // ----- lista -----
 const TILES_MF = [
   ["falta", "Falta lançar", "package-open", "var(--urgente)"],
-  ["lancado", "Já lançados", "circle-check", "var(--ok)"],
-  ["saiu", "Saíram da campanha", "log-out", "var(--hoje)"],
-  ["conf", "Código a confirmar", "scan-barcode", "#7B4FD6"]
+  ["lancado", "Lançados", "circle-check", "var(--ok)"],
+  ["saiu", "Saíram", "log-out", "var(--hoje)"],
+  ["conf", "A confirmar", "scan-barcode", "#7B4FD6"]
 ];
 function renderMF() {
   const lista = $("#mf-lista"); if (!lista) return;
@@ -578,7 +582,7 @@ function renderMF() {
   const cont = { falta: 0, lancado: 0, saiu: 0, conf: 0 };
   dados.forEach((x) => { cont[x.cat]++; if (x.conf) cont.conf++; });
   $("#mf-resumo").innerHTML = TILES_MF.map(([k, nome, ic, cor]) =>
-    `<button class="tile ${filtroMF === k ? "sel" : ""}" style="--c:${cor}" data-f="${k}" type="button"><span class="ti">${ico(ic)}</span><strong>${cont[k]}</strong><span>${nome}</span></button>`).join("");
+    `<button class="tile ${filtroMF === k ? "sel" : ""}" style="--c:${cor}" data-f="${k}" type="button"><strong>${cont[k]}</strong><span>${nome}</span></button>`).join("");
   document.querySelectorAll("#mf-resumo .tile").forEach((t) => t.addEventListener("click", () => {
     filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
   }));
