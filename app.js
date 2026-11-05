@@ -101,7 +101,7 @@ function render() {
     filtro = filtro === t.dataset.f ? "todos" : t.dataset.f; render();
   }));
 
-  const vis = itens.filter((i) => (!busca || (i.nome + " " + (i.codigo || "")).toLowerCase().includes(busca)));
+  const vis = itens.filter((i) => casaBusca($("#busca").value, i.nome, [i.codigo]));
   let html = "";
   GRUPOS.filter((g) => filtro === "todos" || filtro === g.k).forEach((g) => {
     const lista = vis.filter((i) => g.t(diasPara(i.validade))).sort((a, b) => a.validade.localeCompare(b.validade));
@@ -203,12 +203,60 @@ $("#form-edit").addEventListener("submit", async (ev) => {
 async function excluir(id) {
   const i = itens.find((x) => x.id === id); if (!i) return false;
   const mf = mfDeLanc(i), ultimo = !!mf && lancsDe(mf).filter((x) => x.id !== id).length === 0;
-  if (!confirm(`Excluir "${i.nome}" (validade ${fmt(i.validade)})?` + (ultimo ? "\n\nEle também sai da lista do Mercafacil." : ""))) return false;
+  if (!confirm(`Excluir "${i.nome}" (validade ${fmt(i.validade)})?` + (ultimo ? "\n\nEle também sai da lista do Mercafacil." : "") + "\n\nFica 24 h no histórico para restaurar.")) return false;
   try {
-    await db.collection("lancamentos").doc(id).delete();
-    if (ultimo) await db.collection("mercafacil").doc(mf.id).delete();
+    const dados = { ...i }; delete dados.id;
+    const b = db.batch();
+    b.set(db.collection("excluidos").doc(), { em: Date.now(), origId: id, dados, mf: ultimo ? mf : null });
+    b.delete(db.collection("lancamentos").doc(id));
+    if (ultimo) b.delete(db.collection("mercafacil").doc(mf.id));
+    await b.commit();
     return true;
   } catch (e) { alert("Erro ao excluir: " + e.message); return false; }
+}
+
+// ---------- Histórico de excluídos (24 h) ----------
+const HIST_MS = 24 * 3600 * 1000;
+let itensEx = [], limpandoEx = false;
+const exVivos = () => itensEx.filter((x) => Date.now() - x.em < HIST_MS).sort((p, q) => q.em - p.em);
+const tempoAtras = (ms) => { const m = Math.floor((Date.now() - ms) / 60000); return m < 1 ? "agora" : m < 60 ? `há ${m} min` : `há ${Math.floor(m / 60)} h`; };
+const dlgHist = $("#dlg-hist");
+function pintarHist(l) {
+  $("#hist-lista").innerHTML = l.map((x) => `<div class="dup-item"><span><b>${esc(x.dados.nome)}</b><br><small>${tempoAtras(x.em)} · ${x.dados.quantidade} un · vence ${fmt(x.dados.validade)}</small></span><button data-id="${x.id}" type="button">${ico("rotate-ccw")}Restaurar</button></div>`).join("");
+  $("#hist-lista").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => restaurar(b.dataset.id)));
+  icones();
+}
+function renderHist() {
+  const l = exVivos();
+  $("#btn-hist").classList.toggle("oculto", !l.length); $("#hist-n").textContent = l.length;
+  if (dlgHist.open) { if (l.length) pintarHist(l); else dlgHist.close(); }
+}
+async function limparExpirados() {
+  const velhos = itensEx.filter((x) => Date.now() - x.em >= HIST_MS);
+  if (!velhos.length || limpandoEx || !db) return;
+  limpandoEx = true;
+  try {
+    for (let k = 0; k < velhos.length; k += 400) {
+      const b = db.batch(); velhos.slice(k, k + 400).forEach((x) => b.delete(db.collection("excluidos").doc(x.id))); await b.commit();
+    }
+  } catch (e) {}
+  limpandoEx = false;
+}
+async function restaurar(docId) {
+  const x = itensEx.find((e) => e.id === docId); if (!x) return;
+  try {
+    const b = db.batch();
+    b.set(db.collection("lancamentos").doc(x.origId), x.dados);
+    if (x.mf) { const { id: mid, ...md } = x.mf; if (!itensMF.some((m) => m.id === mid)) b.set(db.collection("mercafacil").doc(mid), md); }
+    b.delete(db.collection("excluidos").doc(docId));
+    await b.commit();
+  } catch (e) { alert("Erro ao restaurar: " + e.message); }
+}
+$("#btn-hist").addEventListener("click", () => { pintarHist(exVivos()); dlgHist.showModal(); });
+$("#hist-fechar").addEventListener("click", () => dlgHist.close());
+if (db) {
+  db.collection("excluidos").onSnapshot((s) => { itensEx = s.docs.map((d) => ({ id: d.id, ...d.data() })); limparExpirados(); renderHist(); }, () => {});
+  setInterval(() => { limparExpirados(); renderHist(); }, 60000);
 }
 
 // ---------- Câmera / lançar ----------
@@ -562,6 +610,13 @@ function mostrarMFInfo(m) {
   el.className = "status " + (m.saiu ? "aviso" : "ok");
 }
 
+// busca: cada palavra pode estar em qualquer parte do nome; números casam com o fim do código (4 últimos dígitos)
+function casaBusca(q, nome, codigos) {
+  const toks = norm(q).split(" ").filter(Boolean); if (!toks.length) return true;
+  const n = norm(nome), cods = codigos.map((c) => String(c ?? "").replace(/\D/g, "")).filter(Boolean);
+  return toks.every((t) => n.includes(t) || (/^\d+$/.test(t) && cods.some((c) => c.endsWith(t) || (t.length >= 5 && c.includes(t)))));
+}
+
 // ----- lista -----
 const TILES_MF = [
   ["falta", "Falta lançar", "package-open", "var(--urgente)"],
@@ -586,7 +641,7 @@ function renderMF() {
   document.querySelectorAll("#mf-resumo .tile").forEach((t) => t.addEventListener("click", () => {
     filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
   }));
-  const passa = (x) => (!busca || norm(x.m.nome + " " + x.m.sku + " " + x.m.ean + " " + (x.m.codigoReal || "")).includes(busca))
+  const passa = (x) => casaBusca($("#mf-busca").value, x.m.nome, [x.m.ean, x.m.sku, x.m.codigoReal])
     && (filtroMF === "todos" || (filtroMF === "conf" ? x.conf : x.cat === filtroMF));
   const GR = [["falta", "Falta lançar", "var(--urgente)"], ["lancado", "Já lançados", "var(--ok)"], ["saiu", "Saíram da campanha", "var(--hoje)"]];
   const ultimo = metaMF && metaMF.ultimoLote, novaImp = metaMF && (metaMF.importacoes || 0) > 1;

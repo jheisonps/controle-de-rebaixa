@@ -40,7 +40,10 @@
   <!-- PAINEL / PRODUTOS -->
   <section id="aba-produtos" class="aba">
     <div id="resumo" class="resumo"></div>
-    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="busca" placeholder="Buscar por nome ou código"></div>
+    <div class="busca-linha">
+      <div class="busca-box"><i data-lucide="search"></i><input type="search" id="busca" placeholder="Nome ou 4 últimos dígitos"></div>
+      <button id="btn-hist" class="hist oculto" type="button" aria-label="Excluídos nas últimas 24 horas"><i data-lucide="history"></i><b id="hist-n">0</b></button>
+    </div>
     <div id="lista"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
   </section>
 
@@ -91,7 +94,7 @@
       </div>
     </details>
     <div id="mf-resumo" class="kpis"></div>
-    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Buscar por nome, SKU ou código"></div>
+    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Nome, SKU ou 4 últimos dígitos"></div>
     <div id="mf-lista"></div>
   </section>
 
@@ -133,6 +136,15 @@
     <button id="e-excluir" class="btn-perigo" type="button"><i data-lucide="trash-2"></i>Excluir lançamento</button>
     <button id="e-cancelar" class="btn-link" type="button">Cancelar</button>
   </form>
+</dialog>
+
+<dialog id="dlg-hist">
+  <div class="form">
+    <h2>Excluídos nas últimas 24 h</h2>
+    <p class="nota">Se você não restaurar, o produto some de vez depois de 24 horas.</p>
+    <div id="hist-lista"></div>
+    <button id="hist-fechar" class="btn-link" type="button">Fechar</button>
+  </div>
 </dialog>
 
 <dialog id="dlg-mf">
