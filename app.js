@@ -96,11 +96,7 @@ function render() {
   const busca = $("#busca").value.trim().toLowerCase();
   const cont = {};
   GRUPOS.forEach((g) => { cont[g.k] = itens.filter((i) => g.t(diasPara(i.validade))).length; });
-  const urg = cont.hoje + cont.urgente;
-  $("#resumo").innerHTML = `<div class="hero"><div><small>Prioridade</small><strong>${urg}</strong><span>${urg === 1 ? "produto para rebaixar" : "produtos para rebaixar"} (até 3 dias)</span></div>
-    <button class="hero-btn" id="hero-lancar" type="button">${ico("scan-barcode")}Lançar</button></div>
-    <div class="kpis">` + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><span class="ti">${ico(ICONE[g.k])}</span><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
-  $("#hero-lancar").addEventListener("click", () => document.querySelector('.nav[data-aba="bipar"]').click());
+  $("#resumo").innerHTML = '<div class="kpis">' + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><span class="ti">${ico(ICONE[g.k])}</span><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
   document.querySelectorAll(".tile").forEach((t) => t.addEventListener("click", () => {
     filtro = filtro === t.dataset.f ? "todos" : t.dataset.f; render();
   }));
@@ -115,23 +111,43 @@ function render() {
       const d = diasPara(i.validade);
       const status = d < 0 ? `Vencido há ${-d} ${-d === 1 ? "dia" : "dias"}` : d === 0 ? "Vence hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
       const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
-      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
-      html += `<article class="card" style="--c:${g.cor}">${thumb}
+      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${brl(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${brl(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "") + (precisaConferir(i) ? '<span class="chip conferir">Conferir</span>' : "");
+      html += `<article class="card" data-id="${i.id}" style="--c:${g.cor}">${thumb}
         <div class="info"><strong>${esc(i.nome)}</strong>
-          <div class="meta">${ico("calendar-days")}<b>${fmt(i.validade)}</b>${ico("package")}<b>${i.quantidade} un</b></div>
+          <div class="meta">${ico("calendar-days")}<b>${fmt(i.validade)}</b><span class="qtd"><button data-a="-" type="button" aria-label="Diminuir">−</button><b>${i.quantidade} un</b><button data-a="+" type="button" aria-label="Aumentar">+</button></span></div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}</div>
         <div class="lado"><span class="pill">${status}</span>
-          <div class="acoes"><button data-id="${i.id}" data-a="e" type="button" aria-label="Editar">${ico("pencil")}</button><button class="del" data-id="${i.id}" data-a="x" type="button" aria-label="Excluir">${ico("trash-2")}</button></div></div>
+          <div class="acoes"><button class="${baseConf(i) === hojeISO() ? "feito" : ""}" data-a="ok" type="button" aria-label="Conferido hoje">${ico("circle-check")}</button><button class="del" data-a="x" type="button" aria-label="Excluir">${ico("trash-2")}</button></div></div>
       </article>`;
     });
   });
   $("#lista").innerHTML = html || `<div class="vazio">${ico(itens.length ? "search-x" : "package-open")}<b>${itens.length ? "Nenhum produto encontrado" : "Nenhum produto lançado ainda"}</b><span>${itens.length ? "Tente outro nome ou código." : "Toque em Lançar para cadastrar o primeiro."}</span></div>`;
-  document.querySelectorAll(".acoes button").forEach((b) => b.addEventListener("click", () => {
-    b.dataset.a === "e" ? abrirEdicao(b.dataset.id) : excluir(b.dataset.id);
-  }));
   atualizarAlerta();
   icones();
 }
+// ---------- Conferência e quantidade rápida ----------
+const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const hojeISO = () => ymd(new Date());
+const baseConf = (i) => i.conferidoEm || (i.criadoEm && i.criadoEm.toDate ? ymd(i.criadoEm.toDate()) : hojeISO());
+const diasDesde = (iso) => { const h = new Date(); h.setHours(0, 0, 0, 0); return Math.round((h - new Date(iso + "T00:00:00")) / 86400000); };
+const precisaConferir = (i) => diasDesde(baseConf(i)) > 3;
+async function ajustarQtd(id, d) {
+  const i = itens.find((x) => x.id === id); if (!i) return;
+  if (d < 0 && (i.quantidade || 1) <= 1) { excluir(id); return; }
+  try { await db.collection("lancamentos").doc(id).update({ quantidade: firebase.firestore.FieldValue.increment(d), conferidoEm: hojeISO() }); }
+  catch (e) { alert("Erro ao atualizar: " + e.message); }
+}
+async function conferir(id) {
+  try { await db.collection("lancamentos").doc(id).update({ conferidoEm: hojeISO() }); }
+  catch (e) { alert("Erro ao salvar: " + e.message); }
+}
+$("#lista").addEventListener("click", (ev) => {
+  const card = ev.target.closest(".card[data-id]"); if (!card) return;
+  const id = card.dataset.id, b = ev.target.closest("button[data-a]");
+  if (!b) { abrirEdicao(id); return; }
+  const k = b.dataset.a;
+  if (k === "x") excluir(id); else if (k === "ok") conferir(id); else ajustarQtd(id, k === "+" ? 1 : -1);
+});
 $("#busca").addEventListener("input", render);
 
 if (db) {
@@ -170,7 +186,7 @@ $("#form-edit").addEventListener("submit", async (ev) => {
   try {
     const atual = itens.find((x) => x.id === editandoId), nome = $("#e-nome").value.trim().toUpperCase();
     await db.collection("lancamentos").doc(editandoId).update({
-      nome, validade: v, quantidade: parseInt($("#e-qtd").value, 10) || 1, foto: fotoEdit,
+      nome, validade: v, quantidade: parseInt($("#e-qtd").value, 10) || 1, foto: fotoEdit, conferidoEm: hojeISO(),
       precoSemClube: lerPreco($("#e-p1").value), precoComClube: lerPreco($("#e-p2").value)
     });
     const mfx = atual && mfDeLanc(atual);
@@ -181,10 +197,14 @@ $("#form-edit").addEventListener("submit", async (ev) => {
   } catch (e) { alert("Erro ao salvar: " + e.message); }
 });
 async function excluir(id) {
-  const i = itens.find((x) => x.id === id);
-  if (!i || !confirm(`Excluir "${i.nome}" (validade ${fmt(i.validade)})?`)) return false;
-  try { await db.collection("lancamentos").doc(id).delete(); return true; }
-  catch (e) { alert("Erro ao excluir: " + e.message); return false; }
+  const i = itens.find((x) => x.id === id); if (!i) return false;
+  const mf = mfDeLanc(i), ultimo = !!mf && lancsDe(mf).filter((x) => x.id !== id).length === 0;
+  if (!confirm(`Excluir "${i.nome}" (validade ${fmt(i.validade)})?` + (ultimo ? "\n\nEle também sai da lista do Mercafacil." : ""))) return false;
+  try {
+    await db.collection("lancamentos").doc(id).delete();
+    if (ultimo) await db.collection("mercafacil").doc(mf.id).delete();
+    return true;
+  } catch (e) { alert("Erro ao excluir: " + e.message); return false; }
 }
 
 // ---------- Câmera / lançar ----------
@@ -460,7 +480,7 @@ function atualizarAlerta() {
   const u = urgentes(), el = $("#alerta");
   if (!u.length) { el.classList.add("oculto"); return; }
   const hoje = u.filter((i) => diasPara(i.validade) <= 0).length;
-  $("#alerta-txt").textContent = `${u.length} produto${u.length > 1 ? "s" : ""} para rebaixar` + (hoje ? ` — ${hoje} vence${hoje > 1 ? "m" : ""} HOJE ou já venceu` : " (até 3 dias)");
+  $("#alerta-txt").textContent = `${u.length} ${u.length > 1 ? "produtos vencem" : "produto vence"} em até 3 dias` + (hoje ? ` — ${hoje} ${hoje > 1 ? "vencem" : "vence"} HOJE ou já ${hoje > 1 ? "venceram" : "venceu"}` : "");
   el.classList.remove("oculto");
 }
 function tocarAlerta() { [0, 0.25, 0.5].forEach((q) => beep(1200, 0.18, q)); }
@@ -484,7 +504,7 @@ function mensagemZap() {
     const q = d < 0 ? `venceu em ${curtaData(i.validade)}` : d === 0 ? "vence HOJE" : `vence em ${d} dia${d > 1 ? "s" : ""} (${curtaData(i.validade)})`;
     return `• ${i.nome} (${i.quantidade} un) — ${q}`;
   };
-  return "⚠️ *Controle de Rebaixa*\nProdutos para rebaixar:\n\n" + u.map(linha).join("\n");
+  return "⚠️ *Controle de Rebaixa*\nProdutos vencendo em até 3 dias:\n\n" + u.map(linha).join("\n");
 }
 function abrirZap() {
   let n = (localStorage.getItem("zap") || "").replace(/\D/g, "");
@@ -756,7 +776,7 @@ function previaImport() {
     ["novos", "novo(s) produto(s) adicionado(s)", "var(--ok)", (n) => n.nome],
     ["voltaram", "voltou/voltaram para a campanha", "var(--azul)", (n) => n.nome],
     ["mudou", "com mudança de preço ou código", "var(--urgente)", (x) => x.n.nome + " — " + x.motivo],
-    ["saiu", "saiu/saíram da campanha", "var(--hoje)", (m) => m.nome + (lancsDe(m).length ? " (TEM LANÇAMENTO: rever)" : "")]
+    ["saiu", "saiu/saíram da campanha", "var(--hoje)", (m) => m.nome + (lancsDe(m).length ? " (TEM LANÇAMENTO: rever)" : " (sai da lista)")]
   ];
   const mudancas = G.reduce((s, g) => s + imp[g[0]].length, 0);
   let html = G.filter((g) => imp[g[0]].length).map(([k, t, cor, f]) =>
@@ -781,14 +801,14 @@ async function confirmarImportacao() {
       const o = imp.antigos.get(n.id);
       ops.push([col.doc(n.id), { ...base(n), ...(o && o.nomeEditado ? {} : { nome: n.nome }) }]);
     });
-    imp.saiu.forEach((m) => ops.push([col.doc(m.id), { saiu: true, saiuLote: lote }]));
-    const vistos = new Map(); ops.forEach(([r, d]) => vistos.set(r.path, [r, { ...(vistos.get(r.path) ? vistos.get(r.path)[1] : {}), ...d }]));
+    imp.saiu.forEach((m) => ops.push([col.doc(m.id), lancsDe(m).length ? { saiu: true, saiuLote: lote } : null]));
+    const vistos = new Map(); ops.forEach(([r, d]) => { const p = vistos.get(r.path); vistos.set(r.path, [r, d === null ? null : { ...(p && p[1] ? p[1] : {}), ...d }]); });
     const final = [...vistos.values()];
     for (let i = 0; i < final.length; i += 400) {
-      const b = db.batch(); final.slice(i, i + 400).forEach(([r, d]) => b.set(r, d, { merge: true })); await b.commit();
+      const b = db.batch(); final.slice(i, i + 400).forEach(([r, d]) => (d === null ? b.delete(r) : b.set(r, d, { merge: true }))); await b.commit();
     }
     await db.collection("meta").doc("mercafacil").set({ ultimoLote: lote, importadoEm: lote, importacoes: ((metaMF && metaMF.importacoes) || 0) + 1, arquivo: imp.arquivo, total: imp.mapa.size }, { merge: true });
-    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} que saiu(íram).`, "ok");
+    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} saída(s) da campanha (${imp.saiu.filter((m) => !lancsDe(m).length).length} removida(s) da lista).`, "ok");
     importacao = null; $("#mf-previa").innerHTML = "";
   } catch (e) { setImp("Erro ao importar: " + e.message, "aviso"); btn.disabled = false; btn.textContent = "Confirmar importação"; }
 }
