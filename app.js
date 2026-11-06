@@ -113,7 +113,8 @@ function render() {
       const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
       const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${precoTexto(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${precoTexto(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
       const ck = baseConf(i) === hojeISO() ? "feito" : precisaConferir(i) ? "velho" : "";
-      html += `<article class="card lanc" data-id="${i.id}" style="--c:${g.cor}">
+      const fora = itensMF.length > 0 && !mfDeLanc(i);
+      html += `<article class="card lanc${fora ? " fora" : ""}" data-id="${i.id}" style="--c:${g.cor}">
         <strong class="nome">${esc(i.nome)}</strong>
         <div class="corpo">${thumb}
           <div class="col">
@@ -166,7 +167,7 @@ if (db) {
 if (db) {
   db.collection("mercafacil").onSnapshot((s) => {
     itensMF = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    renderMF(); render();
+    renderMF(); render(); agendarBusca();
   }, () => {});
   db.collection("meta").doc("mercafacil").onSnapshot((d) => { metaMF = d.exists ? d.data() : null; renderMF(); }, () => {});
 }
@@ -617,6 +618,116 @@ function casaBusca(q, nome, codigos) {
   return toks.every((t) => n.includes(t) || (/^\d+$/.test(t) && cods.some((c) => c.endsWith(t) || (t.length >= 5 && c.includes(t)))));
 }
 
+// ----- seções: o app descobre sozinho pelo nome (e pela categoria achada na internet) -----
+const SECOES = ["Padaria", "Biscoitos e doces", "Mercearia", "Matinal e cereais", "Frios e laticínios", "Congelados", "Bebidas", "Limpeza", "Perfumaria e higiene", "Bazar"];
+const REGRAS = [
+  ["Mercearia", ["LEITE( DE)? COCO", "LEITE COND\\w*", "LEITE EM PO", "CR(EME)?( DE)? LEITE", "CALDO", "TEMPERO", "MOLHO", "EXTRATO( DE)? TOMATE"]],
+  ["Perfumaria e higiene", ["AGUA OXIGENADA", "HIDRAT\\w*", "SHAMPOO", "SH", "CONDICIONADOR", "SABONETE", "DESOD\\w*", "CREME DENTAL", "ESCOVA DENTAL", "ENXAGUANTE", "ABS", "ABSORVENTE", "FRALDA", "PAPEL HIGIENICO", "P HIG", "LOCAO", "PROTETOR SOLAR", "ALGODAO", "COTONETE", "BARBEADOR", "LAMINA", "TINTURA", "PERFUME", "COLONIA", "ESMALTE", "ACETONA", "REPELENTE"]],
+  ["Limpeza", ["DETERG\\w*", "SABAO", "AMACIANTE", "DESINF\\w*", "AGUA SANITARIA", "LIMPADOR", "LIMPA \\w+", "ESPONJA", "LA DE ACO", "MULTIUSO", "ALVEJANTE", "LAVA ROUPA\\w*", "LAVA LOUCA\\w*", "SACO( DE)? LIXO", "INSETICIDA", "DESODORIZADOR", "ODORIZADOR", "CLORO", "VEJA", "OMO", "YPE", "BOMBRIL", "ALCOOL( EM GEL)?"]],
+  ["Bazar", ["SAND", "HAV", "CHINELO", "PILHA", "LAMPADA", "VELA", "FOSFORO", "ISQUEIRO", "GARRAFA", "BRINQUEDO", "CADERNO", "CANETA"]],
+  ["Congelados", ["SORVETE", "PICOLE", "PIZZA", "LASANHA", "CONGELAD\\w*", "CONG", "MERLUZA", "POLACA", "TILAPIA", "PEIXE", "CAMARAO", "FILE", "STEAK", "HAMBURGUER", "HAMB", "NUGGET\\w*", "EMPANAD\\w*", "COXINHA", "PAO DE ALHO", "PAO DE QUEIJO", "BATATA( FRITA| PALITO| CONG\\w*)", "POLPA", "FRANGO", "GALO", "CARNE", "ACAI", "KIBE", "ALMONDEGA"]],
+  ["Frios e laticínios", ["BEB(IDA)? LAC\\w*", "LACTEA", "IOGURTE", "IOG", "PETIT SUISSE", "CHAMYTO", "NESQUIK", "YAKULT", "QUEIJO", "MUSSARELA", "REQUEIJAO", "MANTEIGA", "MARG", "MARGARINA", "COALHADA", "PRESUNTO", "MORTADELA", "SALSICHA", "SALAME", "LING", "LINGUICA", "BACON", "FEIJOADA", "KEFIR"]],
+  ["Biscoitos e doces", ["WAFER", "BISC\\w*", "BOLACHA", "BONO", "PASSATEMPO", "TRAKINAS", "COOKIE\\w*", "CHOC\\w*", "BOMBOM", "BALA", "PIRULITO", "CHICLETE", "GOMA", "PACOCA", "BOLINHO", "ROSQUINHA", "SALGADINHO", "DORITOS", "RUFFLES", "CHEETOS", "PRINGLES", "BATATA PALHA", "BEIJINHO", "BRIGADEIRO", "DOCE", "TRIDENT", "HALLS", "PIPOCA", "GALAK", "LACTA", "KITKAT"]],
+  ["Frios e laticínios", ["LEITE", "PATE", "DANONE", "CREAM CHEESE"]],
+  ["Bebidas", ["CERV\\w*", "REFRI\\w*", "SUCO", "KAPO", "ENERG\\w*", "VINHO", "VODKA", "CACHACA", "WHISKY", "ISOTONICO", "GUARANA", "H2OH", "TANG", "REFRESCO", "COCA COLA", "FANTA", "SPRITE", "PEPSI", "GATORADE", "ESPUMANTE", "LICOR", "AGUA"]],
+  ["Padaria", ["PAO", "PAES", "BOLO", "TORRADA", "FATIA", "BISNAGUINHA", "SONHO", "ROSCA"]],
+  ["Matinal e cereais", ["CEREAL", "CEREAIS", "GRANOLA", "MUCILON", "AVEIA", "ACHOC\\w*", "NESCAU", "CAFE", "CAPPUCCINO", "CHA", "BARRA", "NESTUM", "SUCRILHOS", "FARINHA LACTEA"]],
+  ["Mercearia", ["OLEO", "AZEITE", "MAIO", "MAIONESE", "SAL", "ACUCAR", "ARROZ", "FEIJAO", "MACARRAO", "MASSA", "FARINHA", "TAPIOCA", "GELEIA", "GELATINA", "ATUM", "SARDINHA", "MILHO", "ERVILHA", "KETCHUP", "MOSTARDA", "VINAGRE", "COLORIFICO", "AMIDO", "FUBA", "PAO RALADO", "LENTILHA", "AZEITONA", "PALMITO", "CONSERVA", "SOPA"]]
+];
+const mkRe = (fr) => new RegExp("(?:^| )(?:" + fr.join("|") + ")(?= |$)");
+const REGRAS_RE = REGRAS.map(([s, fr]) => [s, mkRe(fr)]);
+// categorias achadas na internet (inglês do Open Food Facts ou português do Cosmos)
+const CATS_RE = [
+  ["Perfumaria e higiene", ["cosmetic", "hygiene", "beauty", "toothpaste", "shampoo", "soap", "deodorant", "diaper", "perfume", "higiene", "perfumaria", "cabelo", "sabonete", "dental"]],
+  ["Limpeza", ["cleaning", "household", "detergent", "laundry", "limpeza", "saneante", "desinfetante"]],
+  ["Bebidas", ["beverage", "water", "juice", "soda", "beer", "wine", "alcohol", "bebida", "cerveja", "refrigerante", "suco"]],
+  ["Congelados", ["frozen", "ice-cream", "pizza", "seafood", "fish", "meat", "poultry", "congelad", "carne", "pescado", "sorvete"]],
+  ["Frios e laticínios", ["dairies", "dairy", "milk", "yogurt", "yoghurt", "cheese", "butter", "margarine", "cold-cut", "sausage", "charcuterie", "laticin", "queijo", "leite", "iogurte", "embutido", "frios"]],
+  ["Biscoitos e doces", ["biscuit", "cookie", "cake", "chocolate", "candy", "candies", "confection", "snack", "cracker", "chips", "sweet", "biscoito", "bolacha", "doce", "salgadinho", "bala"]],
+  ["Padaria", ["bread", "bakery", "pastr", "pao", "padaria"]],
+  ["Matinal e cereais", ["breakfast", "cereal", "granola", "coffee", "teas", "tea-", "oat", "matinal", "cafe", "achocolatado"]],
+  ["Mercearia", ["condiment", "sauce", "oil", "fat", "canned", "pasta", "rice", "legume", "spice", "salt", "sugar", "flour", "grocer", "meal", "mercearia", "molho", "oleo", "arroz", "feijao", "massa"]]
+].map(([s, w]) => [s, new RegExp("(?:^|[ :\\-])(?:" + w.join("|") + ")")]);
+const nomeSec = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+const PALAVRAS = SECOES.map((s) => [s, REGRAS.filter((r) => r[0] === s).flatMap((r) => r[1]).flatMap((f) => f.replace(/\\w\*|[()?\\]/g, " ").split(" ")).filter((w) => w.length >= 4)]);
+function aproximada(n) {
+  const toks = n.split(" ").filter((t) => t.length >= 3);
+  let melhor = "Mercearia", pontos = 0;
+  PALAVRAS.forEach(([s, ws]) => {
+    let p = 0;
+    toks.forEach((t) => ws.forEach((w) => {
+      let k = 0; while (k < t.length && k < w.length && t[k] === w[k]) k++;
+      if (k >= 4 || (t.length >= 4 && w.includes(t))) p += Math.max(k, t.length >= 4 && w.includes(t) ? t.length : 0);
+    }));
+    if (p > pontos) { pontos = p; melhor = s; }
+  });
+  return melhor;
+}
+function secaoDe(m) {
+  if (m.secaoManual && SECOES.includes(m.secaoManual)) return m.secaoManual;
+  const n = nomeSec(m.nomeMF || m.nome);
+  for (const [s, re] of REGRAS_RE) if (re.test(n)) return s;
+  const c = String(m.cats || "").toLowerCase();
+  if (c) for (const [s, re] of CATS_RE) if (re.test(c)) return s;
+  return aproximada(n);
+}
+const fotoMF = (m, l) => m.img || ((l || lancsDe(m)).find((i) => i.foto) || {}).foto || "";
+
+// ----- fotos e categorias achadas sozinhas pelo código de barras (bases abertas; Cosmos só como último recurso) -----
+let enriquecendo = false, buscaTimer = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function fetchT(url, ms = 8000) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { signal: c.signal }); } finally { clearTimeout(t); }
+}
+const codigoBusca = (m) => String(m.codigoReal || (suspeito(m) ? "" : m.ean) || "").replace(/\D/g, "");
+const precisaBuscar = (m) => codigoBusca(m).length >= 8 && (!m.buscadoEm || (!m.img && Date.now() - m.buscadoEm > 7 * 864e5));
+async function infoOFF(cod) {
+  const res = await Promise.all(BASES_OFF.map(async ([, host]) => {
+    try {
+      const r = await fetchT("https://" + host + "/api/v2/product/" + cod + ".json?fields=image_front_small_url,image_front_url,categories_tags");
+      const d = await r.json();
+      if (d.status !== 1 || !d.product) return {};
+      const p = d.product;
+      return { img: p.image_front_small_url || p.image_front_url || "", cats: (p.categories_tags || []).slice(0, 12).join(" ") };
+    } catch (e) { return {}; }
+  }));
+  return { img: (res.find((x) => x.img) || {}).img || "", cats: (res.find((x) => x.cats) || {}).cats || "" };
+}
+function cosmosPermitido() {
+  try { const o = JSON.parse(localStorage.getItem("cosmosBg") || "{}"); return o.d !== hojeISO() || o.n < 5; } catch (e) { return true; }
+}
+function contarCosmos(n) {
+  try { const o = JSON.parse(localStorage.getItem("cosmosBg") || "{}"); localStorage.setItem("cosmosBg", JSON.stringify({ d: hojeISO(), n: n != null ? n : (o.d === hojeISO() ? o.n : 0) + 1 })); } catch (e) {}
+}
+function agendarBusca() { clearTimeout(buscaTimer); buscaTimer = setTimeout(enriquecer, 1500); }
+async function enriquecer() {
+  if (enriquecendo || !db || !navigator.onLine) return;
+  const lista = itensMF.filter((m) => !m.saiu && precisaBuscar(m)).slice(0, 30);
+  if (!lista.length) return;
+  enriquecendo = true; renderMF();
+  try {
+    for (const m of lista) {
+      const cod = codigoBusca(m), out = { buscadoEm: Date.now() };
+      const o = await infoOFF(cod);
+      if (o.img) out.img = o.img;
+      if (o.cats) out.cats = o.cats;
+      if (!out.img && typeof COSMOS_TOKEN !== "undefined" && COSMOS_TOKEN && !m.cosmosEm && cosmosPermitido()) {
+        contarCosmos(); out.cosmosEm = Date.now();
+        const r = await consultarCosmos(cod);
+        if (r.dados) {
+          if (r.dados.thumbnail) out.img = r.dados.thumbnail;
+          if (!out.cats) out.cats = norm([r.dados.gpc && r.dados.gpc.description, r.dados.ncm && r.dados.ncm.description, r.dados.ncm && r.dados.ncm.full_description].filter(Boolean).join(" "));
+        } else if (/Limite/.test(r.aviso || "")) contarCosmos(99);
+      }
+      await db.collection("mercafacil").doc(m.id).set(out, { merge: true });
+      await sleep(900);
+    }
+  } catch (e) {}
+  enriquecendo = false; renderMF();
+  if (lista.length === 30) agendarBusca();
+}
+
 // ----- lista -----
 const TILES_MF = [
   ["falta", "Falta lançar", "package-open", "var(--urgente)"],
@@ -624,15 +735,15 @@ const TILES_MF = [
   ["saiu", "Saíram", "log-out", "var(--hoje)"],
   ["conf", "A confirmar", "scan-barcode", "#7B4FD6"]
 ];
+let filtroSec = "todas";
 function renderMF() {
   const lista = $("#mf-lista"); if (!lista) return;
-  $("#mf-meta").textContent = metaMF && metaMF.importadoEm
+  $("#mf-meta").textContent = (metaMF && metaMF.importadoEm
     ? "Última importação: " + new Date(metaMF.importadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) + " · " + itensMF.filter((m) => !m.saiu).length + " produtos na campanha"
-    : "Nenhuma planilha importada ainda.";
-  const busca = norm($("#mf-busca").value);
+    : "Nenhuma planilha importada ainda.") + (enriquecendo ? " · buscando fotos e seções..." : "");
   const dados = itensMF.map((m) => {
     const l = lancsDe(m);
-    return { m, l, cat: m.saiu ? "saiu" : l.length ? "lancado" : "falta", conf: !m.saiu && precisaConfirmar(m) };
+    return { m, l, sec: secaoDe(m), cat: m.saiu ? "saiu" : l.length ? "lancado" : "falta", conf: !m.saiu && precisaConfirmar(m) };
   });
   const cont = { falta: 0, lancado: 0, saiu: 0, conf: 0 };
   dados.forEach((x) => { cont[x.cat]++; if (x.conf) cont.conf++; });
@@ -641,15 +752,23 @@ function renderMF() {
   document.querySelectorAll("#mf-resumo .tile").forEach((t) => t.addEventListener("click", () => {
     filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
   }));
-  const passa = (x) => casaBusca($("#mf-busca").value, x.m.nome, [x.m.ean, x.m.sku, x.m.codigoReal])
-    && (filtroMF === "todos" || (filtroMF === "conf" ? x.conf : x.cat === filtroMF));
-  const GR = [["falta", "Falta lançar", "var(--urgente)"], ["lancado", "Já lançados", "var(--ok)"], ["saiu", "Saíram da campanha", "var(--hoje)"]];
+  const base = dados.filter((x) => casaBusca($("#mf-busca").value, x.m.nome, [x.m.ean, x.m.sku, x.m.codigoReal])
+    && (filtroMF === "todos" || (filtroMF === "conf" ? x.conf : x.cat === filtroMF)));
+  // faixa de seções (para ver só a seção em que você está)
+  const porSec = {}; base.forEach((x) => { porSec[x.sec] = (porSec[x.sec] || 0) + 1; });
+  if (filtroSec !== "todas" && !porSec[filtroSec]) filtroSec = "todas";
+  const faixa = $("#mf-secoes"), rolagem = faixa.scrollLeft;
+  faixa.innerHTML = base.length ? `<button class="sec ${filtroSec === "todas" ? "sel" : ""}" data-s="todas" type="button">Todas <b>${base.length}</b></button>`
+    + SECOES.filter((s) => porSec[s]).map((s) => `<button class="sec ${filtroSec === s ? "sel" : ""}" data-s="${esc(s)}" type="button">${esc(s)} <b>${porSec[s]}</b></button>`).join("") : "";
+  faixa.scrollLeft = rolagem;
+  faixa.querySelectorAll(".sec").forEach((b) => b.addEventListener("click", () => { filtroSec = b.dataset.s; renderMF(); }));
+  const vis = base.filter((x) => filtroSec === "todas" || x.sec === filtroSec);
   const ultimo = metaMF && metaMF.ultimoLote, novaImp = metaMF && (metaMF.importacoes || 0) > 1;
   let html = "";
-  GR.forEach(([k, nome, cor]) => {
-    const l = dados.filter((x) => x.cat === k && passa(x)).sort((a, b) => (a.m.nome || "").localeCompare(b.m.nome || "", "pt-BR"));
+  SECOES.forEach((s) => {
+    const l = vis.filter((x) => x.sec === s).sort((p, q) => (p.m.nome || "").localeCompare(q.m.nome || "", "pt-BR"));
     if (!l.length) return;
-    html += `<div class="grupo" style="--c:${cor}">${nome}<small>${l.length}</small></div>`;
+    html += `<div class="grupo" style="--c:#5B6B85">${esc(s)}<small>${l.length}</small></div>`;
     l.forEach((x) => { html += cartaoMF(x); });
   });
   lista.innerHTML = html || `<div class="vazio">${ico(itensMF.length ? "search-x" : "file-spreadsheet")}<b>${itensMF.length ? "Nenhum produto encontrado" : "Nenhuma planilha importada"}</b><span>${itensMF.length ? "Tente outro nome ou código." : "No computador, abra “Importar planilha do Mercafacil” e escolha o arquivo."}</span></div>`;
@@ -662,16 +781,18 @@ function renderMF() {
     const qtd = x.l.reduce((s, i) => s + (i.quantidade || 0), 0);
     const pill = x.cat === "saiu" ? "Saiu da campanha" : x.cat === "lancado" ? `Lançado · ${qtd} un` : x.conf ? "Confirmar código" : "Falta lançar";
     const dif = x.cat === "lancado" && x.l.some((i) => (i.precoSemClube != null && m.p1 != null && i.precoSemClube !== m.p1) || (i.precoComClube != null && m.p2 != null && i.precoComClube !== m.p2));
-    const chips = (m.p1 != null ? `<span class="chip">Sem clube ${brl(m.p1)}</span>` : "") + (m.p2 != null ? `<span class="chip clube">Com clube ${brl(m.p2)}</span>` : "")
+    const foto = fotoMF(m, x.l);
+    const thumb = foto ? `<img class="thumb" src="${esc(foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
+    const chips = `<span class="pill">${pill}</span>`
+      + (m.p1 != null && m.p2 != null ? `<span class="chip clube">${precoTexto(m.p1)} → ${precoTexto(m.p2)}</span>` : "")
       + (x.conf ? '<span class="chip conf">EAN igual ao SKU</span>' : "")
       + (novaImp && m.criadoLote === ultimo ? '<span class="chip novo">NOVO</span>' : "")
-      + (dif ? '<span class="chip aviso">Preço diferente do lançamento</span>' : "")
+      + (dif ? '<span class="chip aviso">Preço diferente</span>' : "")
       + (x.cat === "saiu" && x.l.length ? '<span class="chip saiu">Tem lançamento: rever</span>' : "");
-    return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}">
+    return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}">${thumb}
       <div class="info"><strong>${esc(m.nome)}</strong>
         <div class="meta">SKU <b>${esc(m.sku || "-")}</b>${suspeito(m) ? "" : " · EAN <b>" + esc(m.ean) + "</b>"}</div>
-        <div class="chips">${chips}</div></div>
-      <div class="lado"><span class="pill">${pill}</span></div></article>`;
+        <div class="chips">${chips}</div></div></article>`;
   }
 }
 $("#mf-busca").addEventListener("input", renderMF);
@@ -707,6 +828,10 @@ function abrirConferencia(id) {
   const m = itensMF.find((x) => x.id === id); if (!m) return;
   mfConf = m; mfPendente = null;
   $("#mf-nome").textContent = m.nome;
+  const fo = $("#mf-foto"), fsrc = fotoMF(m);
+  fo.onerror = () => fo.classList.add("oculto");
+  if (fsrc) { fo.src = fsrc; fo.classList.remove("oculto"); } else { fo.removeAttribute("src"); fo.classList.add("oculto"); }
+  $("#mf-sec").value = secaoDe(m);
   $("#mf-det").innerHTML = `SKU <b>${esc(m.sku || "-")}</b> · EAN <b>${esc(m.ean || "-")}</b>` + (m.codigoReal ? ` · Código salvo <b>${esc(m.codigoReal)}</b>` : "");
   $("#mf-precos").innerHTML = (m.p1 != null ? `<span class="chip">Sem clube ${brl(m.p1)}</span>` : "") + (m.p2 != null ? `<span class="chip clube">Com clube ${brl(m.p2)}</span>` : "");
   const l = lancsDe(m);
@@ -756,6 +881,12 @@ $("#mf-limpar").addEventListener("click", async () => {
   } catch (e) { alert("Erro: " + e.message); }
 });
 $("#mf-fechar").addEventListener("click", () => dlgMF.close());
+$("#mf-sec").innerHTML = SECOES.map((s) => `<option>${esc(s)}</option>`).join("");
+$("#mf-sec").addEventListener("change", async (e) => {
+  if (!mfConf) return;
+  const v = e.target.value; mfConf.secaoManual = v; renderMF();
+  try { await db.collection("mercafacil").doc(mfConf.id).set({ secaoManual: v }, { merge: true }); } catch (err) {}
+});
 dlgMF.addEventListener("close", pararLeitorMF);
 
 // código conferido: abre o formulário já preenchido (falta só validade e quantidade)

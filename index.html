@@ -95,6 +95,7 @@
     </details>
     <div id="mf-resumo" class="kpis"></div>
     <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Nome, SKU ou 4 últimos dígitos"></div>
+    <div id="mf-secoes" class="secoes"></div>
     <div id="mf-lista"></div>
   </section>
 
@@ -149,9 +150,11 @@
 
 <dialog id="dlg-mf">
   <div class="form">
+    <img id="mf-foto" class="mf-foto oculto" alt="">
     <h2 id="mf-nome"></h2>
     <p class="nota" id="mf-det"></p>
     <div class="chips" id="mf-precos"></div>
+    <label class="sec-sel"><span>Seção</span><select id="mf-sec"></select></label>
     <div id="mf-lancs"></div>
     <p id="mf-aviso" class="status oculto"></p>
     <div id="mf-leitor"></div>

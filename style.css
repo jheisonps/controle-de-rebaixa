@@ -190,3 +190,32 @@ details.imp[open] summary{margin-bottom:14px}
 #hist-lista{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto}
 #dlg-hist .dup-item{background:#F3F5F8}
 #dlg-hist small{color:var(--cinza);font-weight:500}
+
+/* produto lançado que não está na planilha do Mercafacil: cartão preto */
+.card.lanc.fora{background:#15171C;color:#fff}
+.lanc.fora .nome,.lanc.fora .dt b,.lanc.fora .cod b,.lanc.fora .qtd b{color:#fff}
+.lanc.fora .dt,.lanc.fora .cod,.lanc.fora .dt svg{color:#B8C0CC}
+.lanc.fora .qtd button,.lanc.fora .ck{background:#2B2F38;color:#E6EAF0}
+.lanc.fora .ck.feito{background:#14442F;color:#5BE09A}
+.lanc.fora .ck.velho{background:#4A3A12;color:#FFC857}
+.lanc.fora .chip{background:#2B2F38;color:#E6EAF0}
+.lanc.fora .chip.clube{background:#1B3556;color:#8FC0FF}
+.lanc.fora .chip.saiu{background:#4A1D1A;color:#FFB4AD}
+/* faixa de seções e cartão do Mercafacil com foto */
+.secoes{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.secoes::-webkit-scrollbar{display:none}
+.secoes:empty{display:none}
+.sec{flex:none;border:1.5px solid var(--linha,#DDE3EC);background:#fff;color:var(--tinta);border-radius:999px;padding:6px 12px;font:700 .78rem Inter,system-ui;white-space:nowrap}
+.sec b{margin-left:4px;color:var(--cinza)}
+.sec.sel{background:var(--azul);border-color:var(--azul);color:#fff}
+.sec.sel b{color:#DCE9FF}
+.card.mf{gap:10px;padding:8px 10px}
+.card.mf .info{gap:3px}
+.card.mf .info strong{font-size:.86rem}
+.card.mf .meta{font-size:.72rem}
+.card.mf .chips{gap:4px;align-items:center}
+.card.mf .chip{font-size:.66rem;padding:2px 6px}
+.card.mf .pill{font-size:.66rem;padding:3px 8px}
+.mf-foto{display:block;margin:0 auto;max-width:150px;max-height:150px;object-fit:contain;border-radius:14px;background:#F3F5F8}
+.sec-sel{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.85rem;font-weight:700;color:var(--cinza)}
+.sec-sel select{flex:1;max-width:62%;padding:8px 10px;border:1.5px solid var(--linha,#DDE3EC);border-radius:10px;background:#fff;font:600 .88rem Inter,system-ui;color:var(--tinta)}
