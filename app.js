@@ -110,7 +110,8 @@ function render() {
     lista.forEach((i) => {
       const d = diasPara(i.validade);
       const status = d < 0 ? `Venceu há ${-d}d` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
-      const thumb = i.foto ? `<img class="thumb" src="${esc(i.foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
+      const fo = i.foto || ((mfDeLanc(i) || {}).img || "");
+      const thumb = fo ? `<img class="thumb" src="${esc(fo)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
       const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${precoTexto(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${precoTexto(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
       const ck = baseConf(i) === hojeISO() ? "feito" : precisaConferir(i) ? "velho" : "";
       const fora = itensMF.length > 0 && !mfDeLanc(i);
@@ -681,7 +682,7 @@ async function fetchT(url, ms = 8000) {
   try { return await fetch(url, { signal: c.signal }); } finally { clearTimeout(t); }
 }
 const codigoBusca = (m) => String(m.codigoReal || (suspeito(m) ? "" : m.ean) || "").replace(/\D/g, "");
-const precisaBuscar = (m) => codigoBusca(m).length >= 8 && (!m.buscadoEm || (!m.img && Date.now() - m.buscadoEm > 7 * 864e5));
+const precisaBuscar = (m) => !m.imgMF && codigoBusca(m).length >= 8 && (!m.buscadoEm || (!m.img && Date.now() - m.buscadoEm > 7 * 864e5));
 async function infoOFF(cod) {
   const res = await Promise.all(BASES_OFF.map(async ([, host]) => {
     try {
@@ -904,7 +905,7 @@ function abrirLancamentoMF(m, cod) {
 }
 
 // ----- importação da planilha -----
-let importacao = null;
+let importacao = null, importacaoFotos = null;
 const setImp = (t, c) => { const el = $("#mf-import-msg"); el.textContent = t || ""; el.className = "status " + (c || "") + (t ? "" : " oculto"); };
 function carregarXLSX() {
   return new Promise((ok, err) => {
@@ -920,7 +921,7 @@ $("#mf-escolher").addEventListener("click", () => $("#mf-arq").click());
 $("#mf-arq").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) lerPlanilha(f); });
 
 async function lerPlanilha(f) {
-  importacao = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha...");
+  importacao = null; importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha...");
   try {
     await carregarXLSX();
     const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
@@ -998,9 +999,66 @@ async function confirmarImportacao() {
       const b = db.batch(); final.slice(i, i + 400).forEach(([r, d]) => (d === null ? b.delete(r) : b.set(r, d, { merge: true }))); await b.commit();
     }
     await db.collection("meta").doc("mercafacil").set({ ultimoLote: lote, importadoEm: lote, importacoes: ((metaMF && metaMF.importacoes) || 0) + 1, arquivo: imp.arquivo, total: imp.mapa.size }, { merge: true });
-    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} saída(s) da campanha (${imp.saiu.filter((m) => !lancsDe(m).length).length} removida(s) da lista).`, "ok");
+    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} saída(s) da campanha (${imp.saiu.filter((m) => !lancsDe(m).length).length} removida(s) da lista).` + (imp.novos.length ? " Para as fotos dos novos, importe a planilha de fotos." : ""), "ok");
     importacao = null; $("#mf-previa").innerHTML = "";
   } catch (e) { setImp("Erro ao importar: " + e.message, "aviso"); btn.disabled = false; btn.textContent = "Confirmar importação"; }
+}
+
+// ----- importação da planilha de fotos (ofertas do aplicativo): só entram os produtos que já estão na lista -----
+$("#mf-escolher-fotos").addEventListener("click", () => $("#mf-arq-fotos").click());
+$("#mf-arq-fotos").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) lerFotos(f); });
+const semZeros = (c) => String(c ?? "").trim().replace(/\.0$/, "").replace(/^0+/, "");
+async function lerFotos(f) {
+  importacao = null; importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha de fotos...");
+  try {
+    if (!itensMF.length) throw new Error("Importe primeiro a planilha de produtos.");
+    await carregarXLSX();
+    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+    const h = rows.findIndex((r, i) => i < 10 && r.some((c) => norm(c) === "imagem") && r.some((c) => norm(c) === "codigo"));
+    if (h < 0) throw new Error("Não achei as colunas Código e Imagem. Esta é a planilha de ofertas do aplicativo?");
+    const cab = rows[h].map(norm), ic = cab.indexOf("codigo"), ii = cab.indexOf("imagem");
+    const mapa = new Map();
+    rows.slice(h + 1).forEach((r) => {
+      const cod = semZeros(r[ic]), url = String(r[ii] ?? "").trim();
+      if (cod && !mapa.has(cod)) mapa.set(cod, /^https?:\/\//i.test(url) ? url : "");
+    });
+    if (!mapa.size) throw new Error("A planilha não tem produtos.");
+    const mudar = [], iguais = [], sem = [], usados = new Set();
+    itensMF.filter((m) => !m.saiu).forEach((m) => {
+      const k = semZeros(m.sku), url = mapa.get(k);
+      if (mapa.has(k)) usados.add(k);
+      if (!url) { if (!m.imgMF) sem.push(m); return; }
+      if (m.img === url && m.imgMF) iguais.push(m); else mudar.push([m, url]);
+    });
+    importacaoFotos = { mudar, iguais, sem, ignorados: mapa.size - usados.size };
+    setImp(`Planilha de fotos lida: ${mapa.size} códigos. ${mudar.length + iguais.length} produto(s) da rebaixa com foto; ${importacaoFotos.ignorados} de outras campanhas ignorados (nada deles é salvo).`, "ok");
+    previaFotos();
+  } catch (e) { setImp("Erro: " + e.message, "aviso"); }
+}
+function previaFotos() {
+  const f = importacaoFotos; if (!f) return;
+  let html = f.sem.length ? `<details class="pg" style="--c:var(--hoje)"><summary><b>${f.sem.length}</b> produto(s) sem foto nesta planilha</summary><ul>${f.sem.map((m) => `<li>${esc(m.nome)}</li>`).join("")}</ul></details>` : "";
+  html += f.mudar.length
+    ? `<button id="mf-confirmar-fotos" class="btn-grande" type="button"><i data-lucide="check"></i>Salvar ${f.mudar.length} foto(s)</button><button id="mf-cancelar-fotos" class="btn-link" type="button">Cancelar</button>`
+    : `<p class="status ok">Nenhuma foto nova: tudo já está atualizado.</p>`;
+  $("#mf-previa").innerHTML = html; icones();
+  const c = $("#mf-confirmar-fotos"); if (c) c.addEventListener("click", confirmarFotos);
+  const x = $("#mf-cancelar-fotos"); if (x) x.addEventListener("click", () => { importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp(""); });
+}
+async function confirmarFotos() {
+  const f = importacaoFotos; if (!f) return;
+  const btn = $("#mf-confirmar-fotos"); btn.disabled = true; btn.textContent = "Salvando...";
+  try {
+    const col = db.collection("mercafacil");
+    for (let k = 0; k < f.mudar.length; k += 400) {
+      const b = db.batch();
+      f.mudar.slice(k, k + 400).forEach(([m, url]) => b.set(col.doc(m.id), { img: url, imgMF: true }, { merge: true }));
+      await b.commit();
+    }
+    setImp(`✔ ${f.mudar.length} foto(s) salva(s).`, "ok");
+    importacaoFotos = null; $("#mf-previa").innerHTML = "";
+  } catch (e) { setImp("Erro ao salvar as fotos: " + e.message, "aviso"); btn.disabled = false; btn.textContent = "Salvar fotos"; }
 }
 
 // ---------- Botão instalar ----------

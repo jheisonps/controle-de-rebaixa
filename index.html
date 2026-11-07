@@ -86,9 +86,11 @@
     <details class="cartao imp" id="mf-imp">
       <summary><i data-lucide="file-spreadsheet"></i>Importar planilha do Mercafacil</summary>
       <div class="form">
-        <p class="nota">Baixe a planilha da campanha no site do Mercafacil e escolha o arquivo aqui. O app lê só nome, SKU, EAN, campanha, preço 1 e preço 2, e ignora as linhas repetidas.</p>
-        <button id="mf-escolher" class="btn-grande" type="button"><i data-lucide="upload"></i>Escolher planilha (.xlsx)</button>
+        <p class="nota">Primeiro importe a planilha de produtos da campanha. Depois, para ter as fotos, importe a planilha de ofertas do aplicativo: o app só pega as fotos dos produtos que já estão na lista e ignora o resto.</p>
+        <button id="mf-escolher" class="btn-grande" type="button"><i data-lucide="upload"></i>1. Planilha de produtos (.xlsx)</button>
+        <button id="mf-escolher-fotos" class="btn-sec" type="button"><i data-lucide="image"></i>2. Planilha de fotos (.xlsx)</button>
         <input type="file" id="mf-arq" accept=".xlsx,.xls,.csv" class="oculto">
+        <input type="file" id="mf-arq-fotos" accept=".xlsx,.xls,.csv" class="oculto">
         <p id="mf-import-msg" class="status oculto"></p>
         <div id="mf-previa"></div>
       </div>

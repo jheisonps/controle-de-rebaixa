@@ -1,5 +1,5 @@
 // Ao editar qualquer arquivo do app, aumente o número da versão (v1 -> v2 ...)
-const CACHE = "controle-rebaixa-v14";
+const CACHE = "controle-rebaixa-v15";
 const ARQ = ["./index.html","./style.css","./app.js","./firebase-config.js","./manifest.json"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQ))); self.skipWaiting(); });
 self.addEventListener("activate", e => {
