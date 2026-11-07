@@ -1,0 +1,10 @@
+CHAVES DOS ALERTAS (guarde este arquivo; não publique junto com o app)
+
+VAPID_PUBLICA  (pode ser texto normal na Cloudflare):
+BPogUjy0VRpojIxOHnb0haKF_JLhSA0CzzSSN0lwP6saa-APC3fuJGXo93ZGkS_SjiaNaQj0GEOWpFf2Io6bXUE
+
+VAPID_PRIVADA  (na Cloudflare, marque como "Secret"/Segredo; não mostre a ninguém):
+zjKGonKekgn-Nh4shjy1YPyHw9cn_8Euf0eQ-ZLsTCk
+
+Projeto do Firebase que está no firebase-config.js enviado: rebaixa-e1a72
+(Se o seu app publicado usa outro projeto, use os valores projectId e apiKey do firebase-config.js que está publicado.)

@@ -584,6 +584,60 @@ $("#btn-notif").addEventListener("click", async () => {
   if (r === "granted") { notificar(); alert("Notificações ativadas."); } else alert("Notificações não permitidas.");
 });
 
+// ---------- Alertas automáticos (push) ----------
+const VAPID_PUBLICA = "BPogUjy0VRpojIxOHnb0haKF_JLhSA0CzzSSN0lwP6saa-APC3fuJGXo93ZGkS_SjiaNaQj0GEOWpFf2Io6bXUE";
+const AL_PADRAO = { horarios: ["09:00", "12:30", "18:00"], dias: 3 };
+let cfgAl = { ...AL_PADRAO };
+const idInsc = (ep) => btoa(ep).replace(/[^A-Za-z0-9]/g, "").slice(-48);
+const b64Bytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+const alSuporte = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+function statusAl(txt, cls) { const el = $("#al-status"); el.textContent = txt || ""; el.className = "status " + (cls || "") + (txt ? "" : " oculto"); }
+function pintarCfgAl() {
+  [1, 2, 3].forEach((n) => { const el = $("#al-h" + n); if (document.activeElement !== el) el.value = (cfgAl.horarios || [])[n - 1] || ""; });
+  const d = $("#al-dias"); if (document.activeElement !== d) d.value = String(cfgAl.dias);
+}
+async function pintarEstadoAl() {
+  const ativar = $("#al-ativar"), testar = $("#al-testar"), desat = $("#al-desativar");
+  if (!alSuporte()) { ativar.classList.add("oculto"); return statusAl("Este navegador não suporta alertas automáticos.", "aviso"); }
+  if (Notification.permission === "denied") { ativar.classList.add("oculto"); return statusAl("As notificações estão bloqueadas. Libere nas configurações do celular (Apps > este app > Notificações).", "aviso"); }
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = reg && (await reg.pushManager.getSubscription());
+  ativar.classList.toggle("oculto", !!sub); testar.classList.toggle("oculto", !sub); desat.classList.toggle("oculto", !sub);
+  statusAl(sub ? "✔ Alertas ativos neste celular." : "", "ok");
+}
+async function salvarCfgAl() {
+  const horarios = [1, 2, 3].map((n) => $("#al-h" + n).value).filter((h) => /^\d{1,2}:\d{2}$/.test(h));
+  cfgAl = { horarios, dias: Number($("#al-dias").value) };
+  try { await db.collection("config").doc("alertas").set({ ...cfgAl, atualizado: Date.now() }, { merge: true }); } catch (e) { statusAl("Não consegui salvar os horários: " + e.message, "aviso"); }
+}
+["#al-h1", "#al-h2", "#al-h3", "#al-dias"].forEach((s) => $(s).addEventListener("change", salvarCfgAl));
+pintarCfgAl();
+if (db) db.collection("config").doc("alertas").onSnapshot((d) => { cfgAl = { ...AL_PADRAO, ...(d.exists ? d.data() : {}) }; pintarCfgAl(); }, () => {});
+$("#al-ativar").addEventListener("click", async () => {
+  try {
+    if (!alSuporte()) throw new Error("Este navegador não suporta alertas automáticos.");
+    if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão de notificação negada.");
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64Bytes(VAPID_PUBLICA) });
+    await db.collection("inscricoes").doc(idInsc(sub.endpoint)).set({ endpoint: sub.endpoint, criadoEm: Date.now() });
+    await salvarCfgAl();
+    pintarEstadoAl();
+  } catch (e) { statusAl("Não deu para ativar: " + e.message, "aviso"); }
+});
+$("#al-desativar").addEventListener("click", async () => {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration(), sub = reg && (await reg.pushManager.getSubscription());
+    if (sub) { const id = idInsc(sub.endpoint); await sub.unsubscribe(); await db.collection("inscricoes").doc(id).delete(); }
+    pintarEstadoAl();
+  } catch (e) { statusAl("Erro ao desativar: " + e.message, "aviso"); }
+});
+$("#al-testar").addEventListener("click", async () => {
+  const reg = await navigator.serviceWorker.ready;
+  if (reg.active) reg.active.postMessage({ tipo: "teste" });
+});
+if (alSuporte()) navigator.serviceWorker.ready.then(pintarEstadoAl).catch(() => {}); else pintarEstadoAl();
+
 // ---------- Mercafacil ----------
 const norm = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 const soNum = (c) => String(c ?? "").replace(/\D/g, "").replace(/^0+/, "");

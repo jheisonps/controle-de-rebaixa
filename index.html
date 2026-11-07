@@ -104,6 +104,26 @@
   <!-- AVISOS -->
   <section id="aba-avisos" class="aba oculto">
     <div class="titulo"><h2>Avisos</h2><p>Receba o resumo dos produtos que estão vencendo.</p></div>
+    <div class="form cartao" id="card-alertas">
+      <strong class="cartao-t">Alertas automáticos</strong>
+      <p class="nota">O celular avisa com som e vibração nos horários abaixo, mesmo com o app fechado, enquanto houver produto vencendo.</p>
+      <div class="horas">
+        <label>Horário 1<input type="time" id="al-h1"></label>
+        <label>Horário 2<input type="time" id="al-h2"></label>
+        <label>Horário 3<input type="time" id="al-h3"></label>
+      </div>
+      <label>Avisar quando faltar até
+        <select id="al-dias">
+          <option value="0">hoje (ou já vencido)</option><option value="1">1 dia</option><option value="2">2 dias</option>
+          <option value="3">3 dias</option><option value="4">4 dias</option><option value="5">5 dias</option>
+          <option value="6">6 dias</option><option value="7">7 dias</option>
+        </select>
+      </label>
+      <p id="al-status" class="status oculto"></p>
+      <button id="al-ativar" class="btn-grande" type="button"><i data-lucide="bell-ring"></i>Ativar alertas neste celular</button>
+      <button id="al-testar" class="btn-sec oculto" type="button"><i data-lucide="volume-2"></i>Testar alerta agora</button>
+      <button id="al-desativar" class="btn-link oculto" type="button">Desativar neste celular</button>
+    </div>
     <div class="form cartao">
       <label>WhatsApp que recebe o aviso
         <input id="zap-num" inputmode="tel" placeholder="(27) 99999-9999">
