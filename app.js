@@ -585,7 +585,7 @@ $("#btn-notif").addEventListener("click", async () => {
 });
 
 // ---------- Alertas automáticos (push) ----------
-const VAPID_PUBLICA = "BPogUjy0VRpojIxOHnb0haKF_JLhSA0CzzSSN0lwP6saa-APC3fuJGXo93ZGkS_SjiaNaQj0GEOWpFf2Io6bXUE";
+const VAPID_PUBLICA = "BGlvwFmAYNUT-1BVoE0OxswDrTL3yKC08dliIJJPocSK0X0JK3xoUoCjtUogZ5sCV9XkvzKPtl5w_nb_ywaQHpI";
 const AL_PADRAO = { horarios: ["09:00", "12:30", "18:00"], dias: 3 };
 let cfgAl = { ...AL_PADRAO };
 const idInsc = (ep) => btoa(ep).replace(/[^A-Za-z0-9]/g, "").slice(-48);
