@@ -25,14 +25,12 @@
   <button class="nav ativo" data-aba="produtos" type="button"><i data-lucide="layout-dashboard"></i><span>Painel</span></button>
   <button class="nav" data-aba="bipar" type="button"><i data-lucide="scan-barcode"></i><span>Lançar</span></button>
   <button class="nav" data-aba="mercafacil" type="button"><i data-lucide="list-checks"></i><span>Mercafacil</span></button>
-  <button class="nav" data-aba="avisos" type="button"><i data-lucide="bell"></i><span>Avisos</span></button>
 </nav>
 
 <div id="alerta" class="alerta oculto">
   <div class="alerta-t"><i data-lucide="alert-triangle"></i><b id="alerta-txt"></b></div>
   <div class="alerta-btns">
     <button id="btn-som" type="button"><i data-lucide="volume-2"></i>Tocar alerta</button>
-    <button id="btn-zap" type="button"><i data-lucide="message-circle"></i>WhatsApp</button>
   </div>
 </div>
 
@@ -42,6 +40,7 @@
     <div id="resumo" class="resumo"></div>
     <div class="busca-linha">
       <div class="busca-box"><i data-lucide="search"></i><input type="search" id="busca" placeholder="Nome ou 4 últimos dígitos"></div>
+      <button id="btn-sel-p" class="hist" type="button" aria-label="Selecionar vários"><i data-lucide="square-check-big"></i></button>
       <button id="btn-hist" class="hist oculto" type="button" aria-label="Excluídos nas últimas 24 horas"><i data-lucide="history"></i><b id="hist-n">0</b></button>
     </div>
     <div id="lista"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
@@ -96,46 +95,27 @@
       </div>
     </details>
     <div id="mf-resumo" class="kpis"></div>
-    <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Nome, SKU ou 4 últimos dígitos"></div>
+    <div class="busca-linha">
+      <div class="busca-box"><i data-lucide="search"></i><input type="search" id="mf-busca" placeholder="Nome, SKU ou 4 últimos dígitos"></div>
+      <button id="btn-sel-m" class="hist" type="button" aria-label="Selecionar vários"><i data-lucide="square-check-big"></i></button>
+    </div>
     <div id="mf-secoes" class="secoes"></div>
     <div id="mf-lista"></div>
   </section>
-
-  <!-- AVISOS -->
-  <section id="aba-avisos" class="aba oculto">
-    <div class="titulo"><h2>Avisos</h2><p>Receba o resumo dos produtos que estão vencendo.</p></div>
-    <div class="form cartao" id="card-alertas">
-      <strong class="cartao-t">Alertas automáticos</strong>
-      <p class="nota">O celular avisa com som e vibração nos horários abaixo, mesmo com o app fechado, enquanto houver produto vencendo.</p>
-      <div class="horas">
-        <label>Horário 1<input type="time" id="al-h1"></label>
-        <label>Horário 2<input type="time" id="al-h2"></label>
-        <label>Horário 3<input type="time" id="al-h3"></label>
-      </div>
-      <label>Avisar quando faltar até
-        <select id="al-dias">
-          <option value="0">hoje (ou já vencido)</option><option value="1">1 dia</option><option value="2">2 dias</option>
-          <option value="3">3 dias</option><option value="4">4 dias</option><option value="5">5 dias</option>
-          <option value="6">6 dias</option><option value="7">7 dias</option>
-        </select>
-      </label>
-      <p id="al-status" class="status oculto"></p>
-      <button id="al-ativar" class="btn-grande" type="button"><i data-lucide="bell-ring"></i>Ativar alertas neste celular</button>
-      <button id="al-testar" class="btn-sec oculto" type="button"><i data-lucide="volume-2"></i>Testar alerta agora</button>
-      <button id="al-desativar" class="btn-link oculto" type="button">Desativar neste celular</button>
-    </div>
-    <div class="form cartao">
-      <label>WhatsApp que recebe o aviso
-        <input id="zap-num" inputmode="tel" placeholder="(27) 99999-9999">
-      </label>
-      <button id="btn-salvar-zap" class="btn-grande" type="button"><i data-lucide="check"></i>Salvar número</button>
-      <button id="btn-zap2" class="btn-sec" type="button"><i data-lucide="message-circle"></i>Enviar resumo agora no WhatsApp</button>
-      <button id="btn-notif" class="btn-sec" type="button"><i data-lucide="bell"></i>Ativar notificações do celular</button>
-      <button id="btn-cosmos" class="btn-sec" type="button"><i data-lucide="plug-zap"></i>Testar conexão com o Cosmos</button>
-      <p class="nota">O app avisa com <b>som e faixa na tela</b> sempre que for aberto com produto vencendo em até 3 dias. O WhatsApp abre com a mensagem pronta e você só toca em enviar.</p>
-    </div>
-  </section>
 </main>
+
+<div id="barra-sel-p" class="barra-sel oculto" data-t="p">
+  <b class="sel-n">0 selecionados</b>
+  <button class="sel-todos" type="button">Todos</button>
+  <button class="sel-del" type="button"><i data-lucide="trash-2"></i>Excluir</button>
+  <button class="sel-x" type="button" aria-label="Cancelar seleção"><i data-lucide="x"></i></button>
+</div>
+<div id="barra-sel-m" class="barra-sel oculto" data-t="m">
+  <b class="sel-n">0 selecionados</b>
+  <button class="sel-todos" type="button">Todos</button>
+  <button class="sel-del" type="button"><i data-lucide="trash-2"></i>Excluir</button>
+  <button class="sel-x" type="button" aria-label="Cancelar seleção"><i data-lucide="x"></i></button>
+</div>
 
 <input type="file" id="arq-foto" accept="image/*" capture="environment" class="oculto">
 
@@ -191,6 +171,7 @@
       <div id="mf-manual" class="duas iguais oculto"><input id="mf-cod" inputmode="numeric" placeholder="Código de barras"><button id="mf-conferir" class="btn-sec" type="button">Conferir</button></div>
       <button id="mf-limpar" class="btn-link oculto" type="button">Apagar o código de barras salvo deste produto</button>
     </div>
+    <button id="mf-excluir" class="btn-perigo" type="button"><i data-lucide="trash-2"></i>Excluir da lista do Mercafacil</button>
     <button id="mf-fechar" class="btn-link" type="button">Fechar</button>
   </div>
 </dialog>

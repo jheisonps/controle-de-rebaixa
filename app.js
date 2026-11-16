@@ -83,6 +83,7 @@ function paraISO(v) {
 
 // ---------- Abas ----------
 document.querySelectorAll(".nav").forEach((b) => b.addEventListener("click", () => {
+  limparSel("p"); limparSel("m");
   document.querySelectorAll(".nav").forEach((x) => x.classList.toggle("ativo", x === b));
   document.querySelectorAll(".aba").forEach((a) => a.classList.add("oculto"));
   $("#aba-" + b.dataset.aba).classList.remove("oculto");
@@ -97,7 +98,7 @@ function render() {
   const cont = {};
   GRUPOS.forEach((g) => { cont[g.k] = itens.filter((i) => g.t(diasPara(i.validade))).length; });
   $("#resumo").innerHTML = '<div class="kpis">' + GRUPOS.map((g) => `<button class="tile ${filtro === g.k ? "sel" : ""}" style="--c:${g.cor}" data-f="${g.k}" type="button"><strong>${cont[g.k]}</strong><span>${ROTULO[g.k]}</span></button>`).join("") + "</div>";
-  document.querySelectorAll(".tile").forEach((t) => t.addEventListener("click", () => {
+  document.querySelectorAll("#resumo .tile").forEach((t) => t.addEventListener("click", () => {
     filtro = filtro === t.dataset.f ? "todos" : t.dataset.f; render();
   }));
 
@@ -116,6 +117,7 @@ function render() {
       const ck = baseConf(i) === hojeISO() ? "feito" : precisaConferir(i) ? "velho" : "";
       const fora = itensMF.length > 0 && !mfDeLanc(i);
       html += `<article class="card lanc${fora ? " fora" : ""}" data-id="${i.id}" style="--c:${g.cor}">
+        <span class="marca">${ico("check")}</span>
         <strong class="nome">${esc(i.nome)}</strong>
         <div class="corpo">${thumb}
           <div class="col">
@@ -130,6 +132,7 @@ function render() {
   $("#lista").innerHTML = html || `<div class="vazio">${ico(itens.length ? "search-x" : "package-open")}<b>${itens.length ? "Nenhum produto encontrado" : "Nenhum produto lançado ainda"}</b><span>${itens.length ? "Tente outro nome ou código." : "Toque em Lançar para cadastrar o primeiro."}</span></div>`;
   atualizarAlerta();
   icones();
+  pintarSel("p");
 }
 // ---------- Conferência e quantidade rápida ----------
 const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -149,6 +152,7 @@ async function conferir(id) {
 }
 $("#lista").addEventListener("click", (ev) => {
   const card = ev.target.closest(".card[data-id]"); if (!card) return;
+  if (SEL.p.ativo) { alternar("p", card.dataset.id); return; }
   const id = card.dataset.id, b = ev.target.closest("button[data-a]");
   if (!b) { abrirEdicao(id); return; }
   const k = b.dataset.a;
@@ -259,6 +263,106 @@ $("#hist-fechar").addEventListener("click", () => dlgHist.close());
 if (db) {
   db.collection("excluidos").onSnapshot((s) => { itensEx = s.docs.map((d) => ({ id: d.id, ...d.data() })); limparExpirados(); renderHist(); }, () => {});
   setInterval(() => { limparExpirados(); renderHist(); }, 60000);
+}
+
+// ---------- Seleção em massa (Painel e Mercafacil) ----------
+// Toque longo em um produto (ou botão de seleção) liga o modo; depois é só tocar nos outros e excluir.
+const SEL = { p: { ativo: false, ids: new Set() }, m: { ativo: false, ids: new Set() } };
+const selLista = (t) => $(t === "p" ? "#lista" : "#mf-lista");
+function pintarSel(t) {
+  const s = SEL[t], lista = selLista(t), barra = $("#barra-sel-" + t);
+  const cards = [...lista.querySelectorAll(".card[data-id]")];
+  const visiveis = new Set(cards.map((c) => c.dataset.id));
+  s.ids.forEach((id) => { if (!visiveis.has(id)) s.ids.delete(id); }); // só vale o que está na tela
+  lista.classList.toggle("em-sel", s.ativo);
+  cards.forEach((c) => c.classList.toggle("marcado", s.ids.has(c.dataset.id)));
+  barra.classList.toggle("oculto", !s.ativo);
+  barra.querySelector(".sel-n").textContent = s.ids.size === 1 ? "1 selecionado" : s.ids.size + " selecionados";
+  barra.querySelector(".sel-del").disabled = !s.ids.size;
+  barra.querySelector(".sel-todos").textContent = visiveis.size && s.ids.size === visiveis.size ? "Nenhum" : "Todos";
+  $("#btn-sel-" + t).classList.toggle("ligado", s.ativo);
+  document.body.classList.toggle("com-barra", SEL.p.ativo || SEL.m.ativo);
+}
+function alternar(t, id) {
+  const s = SEL[t]; s.ativo = true;
+  if (s.ids.has(id)) s.ids.delete(id); else s.ids.add(id);
+  pintarSel(t);
+}
+function limparSel(t) { SEL[t].ativo = false; SEL[t].ids.clear(); pintarSel(t); }
+function ligarToqueLongo(el, t) {
+  let timer = null, x0 = 0, y0 = 0, disparou = false;
+  const cancelar = () => { clearTimeout(timer); timer = null; };
+  el.addEventListener("pointerdown", (ev) => {
+    disparou = false;
+    const card = ev.target.closest(".card[data-id]");
+    if (!card || SEL[t].ativo || ev.target.closest("button[data-a]")) return;
+    x0 = ev.clientX; y0 = ev.clientY;
+    timer = setTimeout(() => { timer = null; disparou = true; if (navigator.vibrate) navigator.vibrate(30); alternar(t, card.dataset.id); }, 500);
+  });
+  el.addEventListener("pointermove", (ev) => { if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancelar(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((n) => el.addEventListener(n, cancelar));
+  el.addEventListener("contextmenu", (ev) => { if (ev.target.closest(".card[data-id]")) ev.preventDefault(); });
+  // o toque longo não pode abrir o produto quando o dedo soltar
+  el.addEventListener("click", (ev) => { if (disparou) { disparou = false; ev.stopPropagation(); ev.preventDefault(); } }, true);
+}
+["p", "m"].forEach((t) => {
+  const barra = $("#barra-sel-" + t);
+  $("#btn-sel-" + t).addEventListener("click", () => { if (SEL[t].ativo) limparSel(t); else { SEL[t].ativo = true; pintarSel(t); } });
+  barra.querySelector(".sel-x").addEventListener("click", () => limparSel(t));
+  barra.querySelector(".sel-todos").addEventListener("click", () => {
+    const ids = [...selLista(t).querySelectorAll(".card[data-id]")].map((c) => c.dataset.id), s = SEL[t];
+    if (ids.length && ids.every((id) => s.ids.has(id))) s.ids.clear(); else ids.forEach((id) => s.ids.add(id));
+    pintarSel(t);
+  });
+  barra.querySelector(".sel-del").addEventListener("click", async () => {
+    const ids = [...SEL[t].ids]; if (!ids.length) return;
+    const ok = t === "p" ? await excluirVarios(ids) : await excluirMFVarios(ids);
+    if (ok) limparSel(t);
+  });
+  ligarToqueLongo(selLista(t), t);
+});
+
+async function commitEmLotes(ops) {
+  for (let k = 0; k < ops.length; k += 400) {
+    const b = db.batch(); ops.slice(k, k + 400).forEach((f) => f(b)); await b.commit();
+  }
+}
+// Painel: exclui vários lançamentos (todos vão para o histórico de 24 h, como na exclusão individual)
+async function excluirVarios(ids) {
+  const sel = ids.map((id) => itens.find((x) => x.id === id)).filter(Boolean);
+  if (!sel.length) return false;
+  const porMF = new Map();
+  sel.forEach((i) => {
+    const mf = mfDeLanc(i); if (!mf) return;
+    if (!porMF.has(mf.id)) porMF.set(mf.id, { mf, ids: new Set() });
+    porMF.get(mf.id).ids.add(i.id);
+  });
+  // produto do Mercafacil que ficaria sem nenhum lançamento sai da lista (igual à exclusão individual)
+  const sairaoMF = [...porMF.values()].filter((x) => lancsDe(x.mf).every((l) => x.ids.has(l.id)));
+  const nome = sel.length === 1 ? `"${sel[0].nome}" (validade ${fmt(sel[0].validade)})` : `${sel.length} lançamentos`;
+  if (!confirm(`Excluir ${nome}?` + (sairaoMF.length ? `\n\n${sairaoMF.length === 1 ? "1 produto também sai" : sairaoMF.length + " produtos também saem"} da lista do Mercafacil.` : "") + "\n\nFicam 24 h no histórico para restaurar.")) return false;
+  try {
+    const carregaMF = new Map(sairaoMF.map((x) => [[...x.ids][0], x.mf]));
+    const ops = [];
+    sel.forEach((i) => {
+      const dados = { ...i }; delete dados.id;
+      ops.push((b) => b.set(db.collection("excluidos").doc(), { em: Date.now(), origId: i.id, dados, mf: carregaMF.get(i.id) || null }));
+      ops.push((b) => b.delete(db.collection("lancamentos").doc(i.id)));
+    });
+    sairaoMF.forEach((x) => ops.push((b) => b.delete(db.collection("mercafacil").doc(x.mf.id))));
+    await commitEmLotes(ops);
+    return true;
+  } catch (e) { alert("Erro ao excluir: " + e.message); return false; }
+}
+// Mercafacil: exclui produtos da lista importada (os lançamentos do Painel não são mexidos)
+async function excluirMFVarios(ids) {
+  const sel = ids.map((id) => itensMF.find((m) => m.id === id)).filter(Boolean);
+  if (!sel.length) return false;
+  const comLanc = sel.filter((m) => lancsDe(m).length).length;
+  const nome = sel.length === 1 ? `"${sel[0].nome}"` : `${sel.length} produtos`;
+  if (!confirm(`Excluir ${nome} da lista do Mercafacil?` + (comLanc ? `\n\n${comLanc === 1 ? "1 já tem" : comLanc + " já têm"} lançamento no Painel: o lançamento continua lá.` : "") + "\n\nPara trazer de volta, é preciso importar a planilha de novo.")) return false;
+  try { await commitEmLotes(sel.map((m) => (b) => b.delete(db.collection("mercafacil").doc(m.id)))); return true; }
+  catch (e) { alert("Erro ao excluir: " + e.message); return false; }
 }
 
 // ---------- Câmera / lançar ----------
@@ -444,12 +548,6 @@ async function consultarCosmos(codigo) {
   }
   return { aviso: "Não consegui falar com o Cosmos.", detalhe: det };
 }
-$("#btn-cosmos").addEventListener("click", async () => {
-  if (!COSMOS_TOKEN) return alert("Falta o token do Cosmos no firebase-config.js.");
-  const r = await consultarCosmos("7891000100103");
-  alert(r.dados || /não encontrado/.test(r.aviso || "") ? "✔ Cosmos conectado." : r.aviso + "\n" + (r.detalhe || []).join("\n"));
-});
-
 function nota(freq, dur, quando, tipo = "sine", vol = 0.22) {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -527,7 +625,7 @@ $("#form-novo").addEventListener("submit", async (ev) => {
   } catch (e) { $("#msg").textContent = "Erro ao salvar: " + e.message; }
 });
 
-// ---------- Alertas: faixa, som, WhatsApp, notificação ----------
+// ---------- Alerta: faixa vermelha no topo e som ao abrir ----------
 const urgentes = () => itens.filter((i) => diasPara(i.validade) <= 3).sort((a, b) => a.validade.localeCompare(b.validade));
 
 function atualizarAlerta() {
@@ -548,95 +646,21 @@ document.addEventListener("click", function once() {
   document.removeEventListener("click", once);
 }, { once: true });
 $("#btn-som").addEventListener("click", tocarAlerta);
-setInterval(() => { if (urgentes().length) { tocarAlerta(); notificar(); } render(); }, 30 * 60 * 1000);
+// só atualiza a tela (virada do dia); não toca som nem notifica sozinho
+setInterval(render, 30 * 60 * 1000);
 
-function mensagemZap() {
-  const u = urgentes();
-  if (!u.length) return "✅ Controle de Rebaixa: nenhum produto vencendo nos próximos 3 dias.";
-  const linha = (i) => {
-    const d = diasPara(i.validade);
-    const q = d < 0 ? `venceu em ${curtaData(i.validade)}` : d === 0 ? "vence HOJE" : `vence em ${d} dia${d > 1 ? "s" : ""} (${curtaData(i.validade)})`;
-    return `• ${i.nome} (${i.quantidade} un) — ${q}`;
-  };
-  return "⚠️ *Controle de Rebaixa*\nProdutos vencendo em até 3 dias:\n\n" + u.map(linha).join("\n");
-}
-function abrirZap() {
-  let n = (localStorage.getItem("zap") || "").replace(/\D/g, "");
-  if (n && n.length <= 11) n = "55" + n;
-  window.open(`https://wa.me/${n}?text=${encodeURIComponent(mensagemZap())}`, "_blank");
-}
-$("#btn-zap").addEventListener("click", abrirZap);
-$("#btn-zap2").addEventListener("click", abrirZap);
-$("#zap-num").value = localStorage.getItem("zap") || "";
-$("#btn-salvar-zap").addEventListener("click", () => {
-  localStorage.setItem("zap", $("#zap-num").value.trim()); alert("Número salvo neste aparelho.");
-});
-
-async function notificar() {
-  if (!("Notification" in window) || Notification.permission !== "granted" || !urgentes().length) return;
-  const reg = await navigator.serviceWorker.getRegistration();
-  const o = { body: mensagemZap().replace(/\*/g, ""), tag: "rebaixa" };
-  reg ? reg.showNotification("Controle de Rebaixa", o) : new Notification("Controle de Rebaixa", o);
-}
-$("#btn-notif").addEventListener("click", async () => {
-  if (!("Notification" in window)) return alert("Este navegador não suporta notificações.");
-  const r = await Notification.requestPermission();
-  if (r === "granted") { notificar(); alert("Notificações ativadas."); } else alert("Notificações não permitidas.");
-});
-
-// ---------- Alertas automáticos (push) ----------
-const VAPID_PUBLICA = "BGlvwFmAYNUT-1BVoE0OxswDrTL3yKC08dliIJJPocSK0X0JK3xoUoCjtUogZ5sCV9XkvzKPtl5w_nb_ywaQHpI";
-const AL_PADRAO = { horarios: ["09:00", "12:30", "18:00"], dias: 3 };
-let cfgAl = { ...AL_PADRAO };
-const idInsc = (ep) => btoa(ep).replace(/[^A-Za-z0-9]/g, "").slice(-48);
-const b64Bytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-const alSuporte = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-function statusAl(txt, cls) { const el = $("#al-status"); el.textContent = txt || ""; el.className = "status " + (cls || "") + (txt ? "" : " oculto"); }
-function pintarCfgAl() {
-  [1, 2, 3].forEach((n) => { const el = $("#al-h" + n); if (document.activeElement !== el) el.value = (cfgAl.horarios || [])[n - 1] || ""; });
-  const d = $("#al-dias"); if (document.activeElement !== d) d.value = String(cfgAl.dias);
-}
-async function pintarEstadoAl() {
-  const ativar = $("#al-ativar"), testar = $("#al-testar"), desat = $("#al-desativar");
-  if (!alSuporte()) { ativar.classList.add("oculto"); return statusAl("Este navegador não suporta alertas automáticos.", "aviso"); }
-  if (Notification.permission === "denied") { ativar.classList.add("oculto"); return statusAl("As notificações estão bloqueadas. Libere nas configurações do celular (Apps > este app > Notificações).", "aviso"); }
-  const reg = await navigator.serviceWorker.getRegistration();
-  const sub = reg && (await reg.pushManager.getSubscription());
-  ativar.classList.toggle("oculto", !!sub); testar.classList.toggle("oculto", !sub); desat.classList.toggle("oculto", !sub);
-  statusAl(sub ? "✔ Alertas ativos neste celular." : "", "ok");
-}
-async function salvarCfgAl() {
-  const horarios = [1, 2, 3].map((n) => $("#al-h" + n).value).filter((h) => /^\d{1,2}:\d{2}$/.test(h));
-  cfgAl = { horarios, dias: Number($("#al-dias").value) };
-  try { await db.collection("config").doc("alertas").set({ ...cfgAl, atualizado: Date.now() }, { merge: true }); } catch (e) { statusAl("Não consegui salvar os horários: " + e.message, "aviso"); }
-}
-["#al-h1", "#al-h2", "#al-h3", "#al-dias"].forEach((s) => $(s).addEventListener("change", salvarCfgAl));
-pintarCfgAl();
-if (db) db.collection("config").doc("alertas").onSnapshot((d) => { cfgAl = { ...AL_PADRAO, ...(d.exists ? d.data() : {}) }; pintarCfgAl(); }, () => {});
-$("#al-ativar").addEventListener("click", async () => {
+// Limpeza: o app não usa mais alertas automáticos. Se este celular tinha o push ativado antes, desativa.
+(async () => {
   try {
-    if (!alSuporte()) throw new Error("Este navegador não suporta alertas automáticos.");
-    if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão de notificação negada.");
+    if (!db || !("serviceWorker" in navigator)) return;
     const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64Bytes(VAPID_PUBLICA) });
-    await db.collection("inscricoes").doc(idInsc(sub.endpoint)).set({ endpoint: sub.endpoint, criadoEm: Date.now() });
-    await salvarCfgAl();
-    pintarEstadoAl();
-  } catch (e) { statusAl("Não deu para ativar: " + e.message, "aviso"); }
-});
-$("#al-desativar").addEventListener("click", async () => {
-  try {
-    const reg = await navigator.serviceWorker.getRegistration(), sub = reg && (await reg.pushManager.getSubscription());
-    if (sub) { const id = idInsc(sub.endpoint); await sub.unsubscribe(); await db.collection("inscricoes").doc(id).delete(); }
-    pintarEstadoAl();
-  } catch (e) { statusAl("Erro ao desativar: " + e.message, "aviso"); }
-});
-$("#al-testar").addEventListener("click", async () => {
-  const reg = await navigator.serviceWorker.ready;
-  if (reg.active) reg.active.postMessage({ tipo: "teste" });
-});
-if (alSuporte()) navigator.serviceWorker.ready.then(pintarEstadoAl).catch(() => {}); else pintarEstadoAl();
+    const sub = reg.pushManager && (await reg.pushManager.getSubscription());
+    if (!sub) return;
+    const id = btoa(sub.endpoint).replace(/[^A-Za-z0-9]/g, "").slice(-48);
+    await sub.unsubscribe();
+    await db.collection("inscricoes").doc(id).delete();
+  } catch (e) {}
+})();
 
 // ---------- Mercafacil ----------
 const norm = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -808,7 +832,7 @@ function renderMF() {
     filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
   }));
   const base = dados.filter((x) => casaBusca($("#mf-busca").value, x.m.nome, [x.m.ean, x.m.sku, x.m.codigoReal])
-    && (filtroMF === "todos" || (filtroMF === "conf" ? x.conf : x.cat === filtroMF)));
+    && (filtroMF === "todos" ? x.cat !== "lancado" : filtroMF === "conf" ? x.conf : x.cat === filtroMF));
   // faixa de seções (para ver só a seção em que você está)
   const porSec = {}; base.forEach((x) => { porSec[x.sec] = (porSec[x.sec] || 0) + 1; });
   if (filtroSec !== "todas" && !porSec[filtroSec]) filtroSec = "todas";
@@ -826,9 +850,13 @@ function renderMF() {
     html += `<div class="grupo" style="--c:#5B6B85">${esc(s)}<small>${l.length}</small></div>`;
     l.forEach((x) => { html += cartaoMF(x); });
   });
-  lista.innerHTML = html || `<div class="vazio">${ico(itensMF.length ? "search-x" : "file-spreadsheet")}<b>${itensMF.length ? "Nenhum produto encontrado" : "Nenhuma planilha importada"}</b><span>${itensMF.length ? "Tente outro nome ou código." : "No computador, abra “Importar planilha do Mercafacil” e escolha o arquivo."}</span></div>`;
-  lista.querySelectorAll(".card").forEach((c) => c.addEventListener("click", () => abrirConferencia(c.dataset.id)));
+  const buscando = !!$("#mf-busca").value.trim(), tudoLancado = !html && itensMF.length && filtroMF === "todos" && !buscando && cont.lancado > 0;
+  lista.innerHTML = html || (tudoLancado
+    ? `<div class="vazio">${ico("circle-check")}<b>Tudo lançado!</b><span>Nada falta lançar. Toque no ícone verde “Lançados” para ver a lista dos já lançados.</span></div>`
+    : `<div class="vazio">${ico(itensMF.length ? "search-x" : "file-spreadsheet")}<b>${itensMF.length ? "Nenhum produto encontrado" : "Nenhuma planilha importada"}</b><span>${itensMF.length ? "Tente outro nome ou código." + (filtroMF === "todos" && cont.lancado ? " Os já lançados ficam no ícone verde “Lançados”." : "") : "No computador, abra “Importar planilha do Mercafacil” e escolha o arquivo."}</span></div>`);
+  lista.querySelectorAll(".card").forEach((c) => c.addEventListener("click", () => { if (SEL.m.ativo) alternar("m", c.dataset.id); else abrirConferencia(c.dataset.id); }));
   icones();
+  pintarSel("m");
 
   function cartaoMF(x) {
     const m = x.m;
@@ -844,7 +872,7 @@ function renderMF() {
       + (novaImp && m.criadoLote === ultimo ? '<span class="chip novo">NOVO</span>' : "")
       + (dif ? '<span class="chip aviso">Preço diferente</span>' : "")
       + (x.cat === "saiu" && x.l.length ? '<span class="chip saiu">Tem lançamento: rever</span>' : "");
-    return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}">${thumb}
+    return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}"><span class="marca">${ico("check")}</span>${thumb}
       <div class="info"><strong>${esc(m.nome)}</strong>
         <div class="meta">SKU <b>${esc(m.sku || "-")}</b>${suspeito(m) ? "" : " · EAN <b>" + esc(m.ean) + "</b>"}</div>
         <div class="chips">${chips}</div></div></article>`;
@@ -936,6 +964,7 @@ $("#mf-limpar").addEventListener("click", async () => {
   } catch (e) { alert("Erro: " + e.message); }
 });
 $("#mf-fechar").addEventListener("click", () => dlgMF.close());
+$("#mf-excluir").addEventListener("click", async () => { if (mfConf && (await excluirMFVarios([mfConf.id]))) dlgMF.close(); });
 $("#mf-sec").innerHTML = SECOES.map((s) => `<option>${esc(s)}</option>`).join("");
 $("#mf-sec").addEventListener("change", async (e) => {
   if (!mfConf) return;

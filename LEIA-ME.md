@@ -35,11 +35,14 @@ Cloudflare Pages:
 ## 4. Instalar no celular
 Abra o link no Chrome, toque no menu (⋮) > **Adicionar à tela inicial**.
 
-## 5. Avisos
-- Aba **Avisos**: salve o número do WhatsApp e toque em **Ativar notificações**.
-- Ao abrir o app com produto vencendo em até 3 dias, aparece a faixa vermelha e toca o alerta sonoro.
-- O botão **WhatsApp** abre a conversa com a mensagem pronta; você só toca em enviar.
-- O envio 100% automático (sem abrir o app) exige um servidor pago, por isso não está incluído.
+## 5. Alerta de vencimento
+- Ao abrir o app com produto vencendo em até 3 dias, aparece a faixa vermelha no topo do Painel e toca o alerta sonoro. O botão **Tocar alerta** repete o som.
+- Os alertas automáticos, o aviso por WhatsApp e as notificações do celular foram removidos.
+
+## 6. Excluir e selecionar vários (Painel e Mercafacil)
+- Toque longo em um produto (ou no botão de seleção ao lado da busca) liga a seleção. Depois toque nos outros produtos e use **Excluir**. **Todos** marca tudo o que está na tela (respeita filtro, seção e busca).
+- Painel: o que for excluído fica 24 h no histórico para restaurar.
+- Mercafacil: a lista de "Falta lançar" é a visão padrão; os já lançados ficam escondidos no ícone verde **Lançados**. Excluir daqui tira o produto da lista importada (para voltar, importe a planilha de novo).
 
 ## Se editar os arquivos depois
 Aumente o número da versão no topo do `service-worker.js` (v1 para v2) e publique de novo.
