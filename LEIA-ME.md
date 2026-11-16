@@ -44,5 +44,9 @@ Abra o link no Chrome, toque no menu (⋮) > **Adicionar à tela inicial**.
 - Painel: o que for excluído fica 24 h no histórico para restaurar.
 - Mercafacil: a lista de "Falta lançar" é a visão padrão; os já lançados ficam escondidos no ícone verde **Lançados**. Excluir daqui tira o produto da lista importada (para voltar, importe a planilha de novo).
 
+## 7. Importar planilha e validade rápida
+- Aba Mercafacil: há um botão só, **Importar planilha**. O app descobre sozinho se é a de produtos ou a de fotos. Comece pela de produtos.
+- Validade: digite só dia e mês (`1512` vira 15/12 com o ano completado) ou a data inteira. Se a data já passou, o app assume o ano que vem; para produto já vencido, digite o ano (ex.: 101126).
+
 ## Se editar os arquivos depois
 Aumente o número da versão no topo do `service-worker.js` (v1 para v2) e publique de novo.

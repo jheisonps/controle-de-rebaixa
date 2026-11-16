@@ -67,7 +67,7 @@
       </div>
       <label>Produto<input id="n-nome" placeholder="Nome do produto" required></label>
       <div class="duas">
-        <label>Validade<input id="n-validade" class="data" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" required></label>
+        <label>Validade<input id="n-validade" class="data" inputmode="numeric" placeholder="Ex.: 1512" maxlength="10" required></label>
         <label>Quantidade<input id="n-qtd" type="number" min="1" value="1"></label>
       </div>
       <div class="duas iguais">
@@ -85,11 +85,9 @@
     <details class="cartao imp" id="mf-imp">
       <summary><i data-lucide="file-spreadsheet"></i>Importar planilha do Mercafacil</summary>
       <div class="form">
-        <p class="nota">Primeiro importe a planilha de produtos da campanha. Depois, para ter as fotos, importe a planilha de ofertas do aplicativo: o app só pega as fotos dos produtos que já estão na lista e ignora o resto.</p>
-        <button id="mf-escolher" class="btn-grande" type="button"><i data-lucide="upload"></i>1. Planilha de produtos (.xlsx)</button>
-        <button id="mf-escolher-fotos" class="btn-sec" type="button"><i data-lucide="image"></i>2. Planilha de fotos (.xlsx)</button>
+        <p class="nota">Escolha a planilha e o app descobre sozinho se é a de <b>produtos</b> da campanha ou a de <b>fotos</b>. Comece pela de produtos; depois importe a de fotos (ela só entra nos produtos que já estão na lista).</p>
+        <button id="mf-escolher" class="btn-grande" type="button"><i data-lucide="upload"></i>Importar planilha (.xlsx)</button>
         <input type="file" id="mf-arq" accept=".xlsx,.xls,.csv" class="oculto">
-        <input type="file" id="mf-arq-fotos" accept=".xlsx,.xls,.csv" class="oculto">
         <p id="mf-import-msg" class="status oculto"></p>
         <div id="mf-previa"></div>
       </div>
@@ -128,7 +126,7 @@
     </div>
     <label>Produto<input id="e-nome" required></label>
     <div class="duas">
-      <label>Validade<input id="e-validade" class="data" inputmode="numeric" maxlength="10" required></label>
+      <label>Validade<input id="e-validade" class="data" inputmode="numeric" placeholder="Ex.: 1512" maxlength="10" required></label>
       <label>Quantidade<input id="e-qtd" type="number" min="1"></label>
     </div>
     <div class="duas iguais">

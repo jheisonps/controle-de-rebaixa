@@ -55,6 +55,20 @@ function mascara(el) {
   });
 }
 document.querySelectorAll(".data").forEach(mascara);
+// Digitou só dia e mês (1512)? Completa o ano: o atual, ou o próximo se a data já passou. Também aceita 15/12/26.
+function completarData(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 8) return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+  if (d.length === 6) return `${d.slice(0, 2)}/${d.slice(2, 4)}/20${d.slice(4)}`;
+  if (d.length !== 4) return v;
+  const dia = +d.slice(0, 2), mes = +d.slice(2, 4), h = new Date(); h.setHours(0, 0, 0, 0);
+  for (let a = h.getFullYear(); a <= h.getFullYear() + 4; a++) {
+    const t = new Date(a, mes - 1, dia);
+    if (t.getMonth() === mes - 1 && t.getDate() === dia && t >= h) return `${d.slice(0, 2)}/${d.slice(2, 4)}/${a}`;
+  }
+  return v;
+}
+document.querySelectorAll(".data").forEach((el) => el.addEventListener("blur", () => { el.value = completarData(el.value); }));
 
 // Textos digitados sempre em MAIÚSCULAS
 document.querySelectorAll("#n-nome, #e-nome, #busca, #mf-busca").forEach((el) => {
@@ -74,7 +88,7 @@ document.querySelectorAll("#n-p1, #n-p2, #e-p1, #e-p2").forEach((el) => el.addEv
   el.value = d.slice(0, -2).replace(/^0+(?=\d)/, "") + "," + d.slice(-2);
 }));
 function paraISO(v) {
-  const p = v.split("/");
+  const p = completarData(v).split("/");
   if (p.length !== 3 || p[0].length !== 2 || p[1].length !== 2 || p[2].length !== 4) return null;
   const [d, m, a] = p.map(Number), t = new Date(a, m - 1, d);
   if (t.getFullYear() !== a || t.getMonth() !== m - 1 || t.getDate() !== d) return null;
@@ -192,7 +206,7 @@ $("#e-excluir").addEventListener("click", async () => { if (await excluir(editan
 $("#form-edit").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const v = paraISO($("#e-validade").value.trim());
-  if (!v) return alert("Validade inválida. Use DD/MM/AAAA.");
+  if (!v) return alert("Validade inválida. Digite dia e mês (ex.: 1512) ou a data completa.");
   try {
     const atual = itens.find((x) => x.id === editandoId), nome = $("#e-nome").value.trim().toUpperCase();
     await db.collection("lancamentos").doc(editandoId).update({
@@ -611,7 +625,7 @@ $("#form-novo").addEventListener("submit", async (ev) => {
   const mf = mfAtual;
   const codigo = $("#n-codigo").value.trim(), nome = $("#n-nome").value.trim().toUpperCase();
   const validade = paraISO($("#n-validade").value.trim());
-  if (!validade) { $("#msg").textContent = "Validade inválida. Use DD/MM/AAAA."; return; }
+  if (!validade) { $("#msg").textContent = "Validade inválida. Digite dia e mês (ex.: 1512) ou a data completa."; return; }
   try {
     if (codigo) await db.collection("produtos").doc(codigo).set({ nome, ...(fotoNova ? { foto: fotoNova } : {}) }, { merge: true });
     if (mf && nome && nome !== (mf.nome || "").toUpperCase()) await db.collection("mercafacil").doc(mf.id).set({ nome, nomeEditado: true }, { merge: true });
@@ -1001,14 +1015,31 @@ function carregarXLSX() {
 }
 const numPreco = (v) => (typeof v === "number" ? Math.round(v * 100) / 100 : lerPreco(v));
 $("#mf-escolher").addEventListener("click", () => $("#mf-arq").click());
-$("#mf-arq").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) lerPlanilha(f); });
+$("#mf-arq").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) importarArquivo(f); });
 
-async function lerPlanilha(f) {
+// Um botão só: o app olha as colunas e descobre se é a planilha de produtos ou a de fotos
+function tipoPlanilha(rows) {
+  const topo = rows.slice(0, 10), tem = (nome) => topo.some((r) => r.some((c) => norm(c) === nome));
+  if (tem("sku") && tem("ean")) return "produtos";
+  if (tem("imagem") && tem("codigo")) return "fotos";
+  return tem("sku") ? "produtos" : null;
+}
+async function importarArquivo(f) {
   importacao = null; importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha...");
   try {
     await carregarXLSX();
     const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+    const tipo = tipoPlanilha(rows);
+    if (tipo === "produtos") return lerPlanilha(f, rows);
+    if (tipo === "fotos") return lerFotos(f, rows);
+    throw new Error("Não reconheci esta planilha. Use a de produtos da campanha (colunas SKU, EAN, Preço 1 e Preço 2) ou a de fotos (colunas Código e Imagem).");
+  } catch (e) { setImp("Erro: " + e.message, "aviso"); }
+}
+
+async function lerPlanilha(f, rows) {
+  importacao = null; importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha de produtos...");
+  try {
     const h = rows.findIndex((r, i) => i < 10 && r.some((c) => norm(c) === "sku"));
     if (h < 0) throw new Error("Não achei a coluna SKU. Esta é a planilha de campanha do Mercafacil?");
     const cab = rows[h].map(norm), col = (...n) => cab.findIndex((c) => n.includes(c));
@@ -1082,22 +1113,17 @@ async function confirmarImportacao() {
       const b = db.batch(); final.slice(i, i + 400).forEach(([r, d]) => (d === null ? b.delete(r) : b.set(r, d, { merge: true }))); await b.commit();
     }
     await db.collection("meta").doc("mercafacil").set({ ultimoLote: lote, importadoEm: lote, importacoes: ((metaMF && metaMF.importacoes) || 0) + 1, arquivo: imp.arquivo, total: imp.mapa.size }, { merge: true });
-    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} saída(s) da campanha (${imp.saiu.filter((m) => !lancsDe(m).length).length} removida(s) da lista).` + (imp.novos.length ? " Para as fotos dos novos, importe a planilha de fotos." : ""), "ok");
+    setImp(`✔ Importado: ${imp.novos.length} novo(s), ${imp.mudou.length} alterado(s), ${imp.voltaram.length} que voltou(aram), ${imp.saiu.length} saída(s) da campanha (${imp.saiu.filter((m) => !lancsDe(m).length).length} removida(s) da lista).` + (imp.novos.length ? " Para as fotos dos novos, importe a planilha de fotos (mesmo botão)." : ""), "ok");
     importacao = null; $("#mf-previa").innerHTML = "";
   } catch (e) { setImp("Erro ao importar: " + e.message, "aviso"); btn.disabled = false; btn.textContent = "Confirmar importação"; }
 }
 
 // ----- importação da planilha de fotos (ofertas do aplicativo): só entram os produtos que já estão na lista -----
-$("#mf-escolher-fotos").addEventListener("click", () => $("#mf-arq-fotos").click());
-$("#mf-arq-fotos").addEventListener("change", (ev) => { const f = ev.target.files[0]; ev.target.value = ""; if (f) lerFotos(f); });
 const semZeros = (c) => String(c ?? "").trim().replace(/\.0$/, "").replace(/^0+/, "");
-async function lerFotos(f) {
+async function lerFotos(f, rows) {
   importacao = null; importacaoFotos = null; $("#mf-previa").innerHTML = ""; setImp("Lendo a planilha de fotos...");
   try {
-    if (!itensMF.length) throw new Error("Importe primeiro a planilha de produtos.");
-    await carregarXLSX();
-    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+    if (!itensMF.length) throw new Error("Esta é a planilha de FOTOS. Antes dela, falta importar a planilha de PRODUTOS da campanha (a que tem SKU e preços). Importe a de produtos primeiro e depois escolha esta de novo.");
     const h = rows.findIndex((r, i) => i < 10 && r.some((c) => norm(c) === "imagem") && r.some((c) => norm(c) === "codigo"));
     if (h < 0) throw new Error("Não achei as colunas Código e Imagem. Esta é a planilha de ofertas do aplicativo?");
     const cab = rows[h].map(norm), ic = cab.indexOf("codigo"), ii = cab.indexOf("imagem");
