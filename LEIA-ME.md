@@ -48,5 +48,11 @@ Abra o link no Chrome, toque no menu (⋮) > **Adicionar à tela inicial**.
 - Aba Mercafacil: há um botão só, **Importar planilha**. O app descobre sozinho se é a de produtos ou a de fotos. Comece pela de produtos.
 - Validade: digite só dia e mês (`1512` vira 15/12 com o ano completado) ou a data inteira. Se a data já passou, o app assume o ano que vem; para produto já vencido, digite o ano (ex.: 101126).
 
+## 8. Marcas da vistoria: Falta placa e Acabou
+- O app não conversa com o site do Mercafacil; as marcas servem de lista para você.
+- **Falta placa**: botão em cada produto da aba Mercafacil (e dentro do produto no Painel). O quadradinho laranja "Falta placa" mostra só os que estão sem placa. Ao colocar a placa, toque no botão de novo para desmarcar.
+- **Acabou**: o produto vai para o quadradinho cinza "Acabou" e o lançamento dele sai do Painel (fica 24 h no histórico). No fim da vistoria, desative esses produtos no site e depois selecione todos em "Acabou" e exclua.
+- As marcas continuam quando você importa uma planilha nova.
+
 ## Se editar os arquivos depois
 Aumente o número da versão no topo do `service-worker.js` (v1 para v2) e publique de novo.

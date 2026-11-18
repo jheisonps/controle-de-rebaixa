@@ -148,7 +148,7 @@ details.imp[open] summary{margin-bottom:14px}
 .chip.conferir{background:#FFF4DE;color:#8A5A00}
 
 /* quadradinhos de urgência: uma linha só, com a cor e o nome dentro */
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
 .tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:0;border-radius:12px;padding:7px 2px;background:var(--c);color:#fff;font:inherit;min-width:0;box-shadow:var(--sombra);transition:.15s}
 .tile strong{font-size:1.15rem;font-weight:800;line-height:1.1;color:#fff}
 .tile span{font-size:.64rem;font-weight:700;line-height:1.1;white-space:nowrap}
@@ -244,3 +244,15 @@ body.com-barra{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
   .barra-sel{bottom:16px;left:246px;right:16px;max-width:948px;margin:0}
   body.com-barra{padding-bottom:90px}
 }
+
+/* marcas da vistoria: Falta placa / Acabou */
+.chip.placa{background:#FFE9C7;color:#8A4B00}
+.card.mf .acoes{display:flex;gap:6px;margin-top:7px}
+.marcas{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ac{display:flex;align-items:center;justify-content:center;gap:5px;flex:1;min-width:0;min-height:38px;padding:0 8px;border:1.5px solid #D5DBE5;border-radius:10px;background:#fff;color:#42526E;font:700 .74rem Inter,system-ui;transition:.15s}
+.ac svg{width:15px;height:15px;flex:none}
+.ac:active{transform:scale(.96)}
+.marcas .ac{min-height:46px;font-size:.88rem}
+.ac.placa.on{background:#E08A00;border-color:#E08A00;color:#fff}
+.ac.acabou.on{background:#5B6B85;border-color:#5B6B85;color:#fff}
+.em-sel .card .acoes{display:none}

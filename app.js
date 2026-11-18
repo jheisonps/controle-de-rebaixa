@@ -127,7 +127,7 @@ function render() {
       const status = d < 0 ? `Venceu há ${-d}d` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `Em ${d} dias`;
       const fo = i.foto || ((mfDeLanc(i) || {}).img || "");
       const thumb = fo ? `<img class="thumb" src="${esc(fo)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
-      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${precoTexto(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${precoTexto(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "");
+      const chips = (i.precoSemClube != null ? `<span class="chip">Sem clube ${precoTexto(i.precoSemClube)}</span>` : "") + (i.precoComClube != null ? `<span class="chip clube">Com clube ${precoTexto(i.precoComClube)}</span>` : "") + (mfDeLanc(i)?.saiu ? '<span class="chip saiu">Saiu do Mercafacil</span>' : "") + (mfDeLanc(i)?.faltaPlaca ? '<span class="chip placa">Falta placa</span>' : "");
       const ck = baseConf(i) === hojeISO() ? "feito" : precisaConferir(i) ? "velho" : "";
       const fora = itensMF.length > 0 && !mfDeLanc(i);
       html += `<article class="card lanc${fora ? " fora" : ""}" data-id="${i.id}" style="--c:${g.cor}">
@@ -193,15 +193,28 @@ if (db) {
 
 // ---------- Editar / excluir ----------
 const dlg = $("#dlg");
+let editMF = null;
 function abrirEdicao(id) {
   const i = itens.find((x) => x.id === id); if (!i) return;
   editandoId = id;
+  editMF = mfDeLanc(i) || null;
+  $("#e-marcas").classList.toggle("oculto", !editMF);
+  $("#e-placa").classList.toggle("on", !!(editMF && editMF.faltaPlaca));
   $("#e-nome").value = (i.nome || "").toUpperCase(); $("#e-validade").value = fmt(i.validade);
   $("#e-qtd").value = i.quantidade; $("#e-p1").value = precoTexto(i.precoSemClube); $("#e-p2").value = precoTexto(i.precoComClube);
   fotoEdit = i.foto || ""; mostrarFoto($("#e-foto"), $("#btn-foto-e"), fotoEdit);
   dlg.showModal();
 }
 $("#e-cancelar").addEventListener("click", () => dlg.close());
+$("#e-placa").addEventListener("click", async () => {
+  const m = editMF && itensMF.find((x) => x.id === editMF.id); if (!m) return;
+  const novo = !m.faltaPlaca;
+  try { await db.collection("mercafacil").doc(m.id).set({ faltaPlaca: novo }, { merge: true }); editMF = { ...m, faltaPlaca: novo }; $("#e-placa").classList.toggle("on", novo); }
+  catch (e) { alert("Erro: " + e.message); }
+});
+$("#e-acabou").addEventListener("click", async () => {
+  const m = editMF && itensMF.find((x) => x.id === editMF.id); if (m && (await marcarAcabou(m))) dlg.close();
+});
 $("#e-excluir").addEventListener("click", async () => { if (await excluir(editandoId)) dlg.close(); });
 $("#form-edit").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -267,6 +280,8 @@ async function restaurar(docId) {
   try {
     const b = db.batch();
     b.set(db.collection("lancamentos").doc(x.origId), x.dados);
+    const mfx = (x.dados.mfId && itensMF.find((m) => m.id === x.dados.mfId)) || acharMF(x.dados.codigo);
+    if (mfx && mfx.acabou) b.set(db.collection("mercafacil").doc(mfx.id), { acabou: false, acabouEm: null }, { merge: true });
     if (x.mf) { const { id: mid, ...md } = x.mf; if (!itensMF.some((m) => m.id === mid)) b.set(db.collection("mercafacil").doc(mid), md); }
     b.delete(db.collection("excluidos").doc(docId));
     await b.commit();
@@ -374,7 +389,9 @@ async function excluirMFVarios(ids) {
   if (!sel.length) return false;
   const comLanc = sel.filter((m) => lancsDe(m).length).length;
   const nome = sel.length === 1 ? `"${sel[0].nome}"` : `${sel.length} produtos`;
-  if (!confirm(`Excluir ${nome} da lista do Mercafacil?` + (comLanc ? `\n\n${comLanc === 1 ? "1 já tem" : comLanc + " já têm"} lançamento no Painel: o lançamento continua lá.` : "") + "\n\nPara trazer de volta, é preciso importar a planilha de novo.")) return false;
+  if (sel.every((m) => m.acabou)) {
+    if (!confirm(`Remover ${nome} da lista “Acabou”?\n\nFaça isso depois de desativar no site do Mercafacil. Se o produto ainda estiver na planilha, ele volta quando você importar de novo.`)) return false;
+  } else if (!confirm(`Excluir ${nome} da lista do Mercafacil?` + (comLanc ? `\n\n${comLanc === 1 ? "1 já tem" : comLanc + " já têm"} lançamento no Painel: o lançamento continua lá.` : "") + "\n\nPara trazer de volta, é preciso importar a planilha de novo.")) return false;
   try { await commitEmLotes(sel.map((m) => (b) => b.delete(db.collection("mercafacil").doc(m.id)))); return true; }
   catch (e) { alert("Erro ao excluir: " + e.message); return false; }
 }
@@ -634,6 +651,7 @@ $("#form-novo").addEventListener("submit", async (ev) => {
       precoSemClube: lerPreco($("#n-p1").value), precoComClube: lerPreco($("#n-p2").value),
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (mf && mf.acabou) await db.collection("mercafacil").doc(mf.id).set({ acabou: false, acabouEm: null }, { merge: true });
     limparNovo(); ev.target.classList.add("oculto"); codigoAtual = null;
     iniciarCamera("Produto salvo! ");
   } catch (e) { $("#msg").textContent = "Erro ao salvar: " + e.message; }
@@ -825,8 +843,10 @@ async function enriquecer() {
 const TILES_MF = [
   ["falta", "Falta lançar", "package-open", "var(--urgente)"],
   ["lancado", "Lançados", "circle-check", "var(--ok)"],
-  ["saiu", "Saíram", "log-out", "var(--hoje)"],
-  ["conf", "A confirmar", "scan-barcode", "#7B4FD6"]
+  ["placa", "Falta placa", "flag", "#E08A00"],
+  ["acabou", "Acabou", "ban", "#5B6B85"],
+  ["conf", "A confirmar", "scan-barcode", "#7B4FD6"],
+  ["saiu", "Saíram", "log-out", "var(--hoje)"]
 ];
 let filtroSec = "todas";
 function renderMF() {
@@ -836,17 +856,17 @@ function renderMF() {
     : "Nenhuma planilha importada ainda.") + (enriquecendo ? " · buscando fotos e seções..." : "");
   const dados = itensMF.map((m) => {
     const l = lancsDe(m);
-    return { m, l, sec: secaoDe(m), cat: m.saiu ? "saiu" : l.length ? "lancado" : "falta", conf: !m.saiu && precisaConfirmar(m) };
+    return { m, l, sec: secaoDe(m), cat: m.saiu ? "saiu" : m.acabou ? "acabou" : l.length ? "lancado" : "falta", conf: !m.saiu && !m.acabou && precisaConfirmar(m), placa: !!m.faltaPlaca && !m.saiu && !m.acabou };
   });
-  const cont = { falta: 0, lancado: 0, saiu: 0, conf: 0 };
-  dados.forEach((x) => { cont[x.cat]++; if (x.conf) cont.conf++; });
+  const cont = { falta: 0, lancado: 0, saiu: 0, acabou: 0, conf: 0, placa: 0 };
+  dados.forEach((x) => { cont[x.cat]++; if (x.conf) cont.conf++; if (x.placa) cont.placa++; });
   $("#mf-resumo").innerHTML = TILES_MF.map(([k, nome, ic, cor]) =>
     `<button class="tile ${filtroMF === k ? "sel" : ""}" style="--c:${cor}" data-f="${k}" type="button"><strong>${cont[k]}</strong><span>${nome}</span></button>`).join("");
   document.querySelectorAll("#mf-resumo .tile").forEach((t) => t.addEventListener("click", () => {
     filtroMF = filtroMF === t.dataset.f ? "todos" : t.dataset.f; renderMF();
   }));
   const base = dados.filter((x) => casaBusca($("#mf-busca").value, x.m.nome, [x.m.ean, x.m.sku, x.m.codigoReal])
-    && (filtroMF === "todos" ? x.cat !== "lancado" : filtroMF === "conf" ? x.conf : x.cat === filtroMF));
+    && (filtroMF === "todos" ? x.cat !== "lancado" && x.cat !== "acabou" : filtroMF === "conf" ? x.conf : filtroMF === "placa" ? x.placa : x.cat === filtroMF));
   // faixa de seções (para ver só a seção em que você está)
   const porSec = {}; base.forEach((x) => { porSec[x.sec] = (porSec[x.sec] || 0) + 1; });
   if (filtroSec !== "todas" && !porSec[filtroSec]) filtroSec = "todas";
@@ -864,24 +884,36 @@ function renderMF() {
     html += `<div class="grupo" style="--c:#5B6B85">${esc(s)}<small>${l.length}</small></div>`;
     l.forEach((x) => { html += cartaoMF(x); });
   });
+  const msgFiltro = { placa: ["flag", "Nenhum produto sem placa", "Quando marcar “Falta placa” em um produto, ele aparece aqui."], acabou: ["ban", "Nenhum produto marcado como acabou", "Marque “Acabou” nos produtos para depois desativá-los no site do Mercafacil."] }[filtroMF];
   const buscando = !!$("#mf-busca").value.trim(), tudoLancado = !html && itensMF.length && filtroMF === "todos" && !buscando && cont.lancado > 0;
-  lista.innerHTML = html || (tudoLancado
+  lista.innerHTML = html || (msgFiltro && !buscando
+    ? `<div class="vazio">${ico(msgFiltro[0])}<b>${msgFiltro[1]}</b><span>${msgFiltro[2]}</span></div>`
+    : tudoLancado
     ? `<div class="vazio">${ico("circle-check")}<b>Tudo lançado!</b><span>Nada falta lançar. Toque no ícone verde “Lançados” para ver a lista dos já lançados.</span></div>`
     : `<div class="vazio">${ico(itensMF.length ? "search-x" : "file-spreadsheet")}<b>${itensMF.length ? "Nenhum produto encontrado" : "Nenhuma planilha importada"}</b><span>${itensMF.length ? "Tente outro nome ou código." + (filtroMF === "todos" && cont.lancado ? " Os já lançados ficam no ícone verde “Lançados”." : "") : "No computador, abra “Importar planilha do Mercafacil” e escolha o arquivo."}</span></div>`);
-  lista.querySelectorAll(".card").forEach((c) => c.addEventListener("click", () => { if (SEL.m.ativo) alternar("m", c.dataset.id); else abrirConferencia(c.dataset.id); }));
+  lista.querySelectorAll(".card").forEach((c) => c.addEventListener("click", (ev) => {
+    if (SEL.m.ativo) return alternar("m", c.dataset.id);
+    const b = ev.target.closest("button[data-a]");
+    if (b) marcarMF(c.dataset.id, b.dataset.a); else abrirConferencia(c.dataset.id);
+  }));
   icones();
   pintarSel("m");
 
   function cartaoMF(x) {
     const m = x.m;
-    const cor = x.conf ? "#7B4FD6" : x.cat === "falta" ? "var(--urgente)" : x.cat === "lancado" ? "var(--ok)" : "var(--hoje)";
+    const cor = x.cat === "acabou" ? "#5B6B85" : x.conf ? "#7B4FD6" : x.cat === "falta" ? "var(--urgente)" : x.cat === "lancado" ? "var(--ok)" : "var(--hoje)";
     const qtd = x.l.reduce((s, i) => s + (i.quantidade || 0), 0);
-    const pill = x.cat === "saiu" ? "Saiu da campanha" : x.cat === "lancado" ? `Lançado · ${qtd} un` : x.conf ? "Confirmar código" : "Falta lançar";
+    const pill = x.cat === "saiu" ? "Saiu da campanha" : x.cat === "acabou" ? "Acabou" : x.cat === "lancado" ? `Lançado · ${qtd} un` : x.conf ? "Confirmar código" : "Falta lançar";
     const dif = x.cat === "lancado" && x.l.some((i) => (i.precoSemClube != null && m.p1 != null && i.precoSemClube !== m.p1) || (i.precoComClube != null && m.p2 != null && i.precoComClube !== m.p2));
+    const acoes = x.cat === "saiu" ? "" : `<div class="acoes">`
+      + (x.cat !== "acabou" ? `<button class="ac placa ${x.placa ? "on" : ""}" data-a="placa" type="button">${ico("flag")}Falta placa</button>` : "")
+      + `<button class="ac acabou ${x.cat === "acabou" ? "on" : ""}" data-a="acabou" type="button">${ico("ban")}${x.cat === "acabou" ? "Acabou · desfazer" : "Acabou"}</button></div>`;
     const foto = fotoMF(m, x.l);
     const thumb = foto ? `<img class="thumb" src="${esc(foto)}" alt="" loading="lazy" onerror="this.classList.add('quebrada')">` : `<div class="thumb ph">${ico("package")}</div>`;
     const chips = `<span class="pill">${pill}</span>`
       + (m.p1 != null && m.p2 != null ? `<span class="chip clube">${precoTexto(m.p1)} → ${precoTexto(m.p2)}</span>` : "")
+      + (x.cat === "acabou" ? '<span class="chip aviso">Desativar no site</span>' : "")
+      + (x.placa ? '<span class="chip placa">Falta placa</span>' : "")
       + (x.conf ? '<span class="chip conf">EAN igual ao SKU</span>' : "")
       + (novaImp && m.criadoLote === ultimo ? '<span class="chip novo">NOVO</span>' : "")
       + (dif ? '<span class="chip aviso">Preço diferente</span>' : "")
@@ -889,10 +921,36 @@ function renderMF() {
     return `<article class="card mf ${x.conf ? "conf" : ""}" data-id="${esc(m.id)}" style="--c:${cor}"><span class="marca">${ico("check")}</span>${thumb}
       <div class="info"><strong>${esc(m.nome)}</strong>
         <div class="meta">SKU <b>${esc(m.sku || "-")}</b>${suspeito(m) ? "" : " · EAN <b>" + esc(m.ean) + "</b>"}</div>
-        <div class="chips">${chips}</div></div></article>`;
+        <div class="chips">${chips}</div>${acoes}</div></article>`;
   }
 }
 $("#mf-busca").addEventListener("input", renderMF);
+
+// ----- marcas da vistoria: "Falta placa" e "Acabou" (o app não fala com o site do Mercafacil: serve de lista para você) -----
+async function marcarMF(id, tipo) {
+  const m = itensMF.find((x) => x.id === id); if (!m) return;
+  try {
+    if (tipo === "placa") await db.collection("mercafacil").doc(id).set({ faltaPlaca: !m.faltaPlaca }, { merge: true });
+    else if (m.acabou) await db.collection("mercafacil").doc(id).set({ acabou: false, acabouEm: null }, { merge: true });
+    else await marcarAcabou(m);
+  } catch (e) { alert("Erro: " + e.message); }
+}
+// Acabou: o produto vai para a lista "Acabou" e o lançamento dele sai do Painel (fica 24 h no histórico)
+async function marcarAcabou(m) {
+  const l = lancsDe(m);
+  if (l.length && !confirm(`Marcar "${m.nome}" como ACABOU?\n\nO lançamento dele sai do Painel (fica 24 h no histórico) e o produto vai para a lista “Acabou”, para você desativar no site do Mercafacil.`)) return false;
+  try {
+    const b = db.batch();
+    l.forEach((i) => {
+      const dados = { ...i }; delete dados.id;
+      b.set(db.collection("excluidos").doc(), { em: Date.now(), origId: i.id, dados, mf: null });
+      b.delete(db.collection("lancamentos").doc(i.id));
+    });
+    b.set(db.collection("mercafacil").doc(m.id), { acabou: true, acabouEm: Date.now(), faltaPlaca: false }, { merge: true });
+    await b.commit();
+    return true;
+  } catch (e) { alert("Erro: " + e.message); return false; }
+}
 
 // ----- conferência (toque no nome + bipar) -----
 let mfConf = null, mfPendente = null, leitorMF = null, travaMF = false;
