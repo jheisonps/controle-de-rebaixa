@@ -397,6 +397,8 @@ async function excluirMFVarios(ids) {
 }
 
 // ---------- Câmera / lançar ----------
+// faixa de leitura horizontal; a altura respeita a parte visível da câmera (mesmo limite do CSS)
+const qrboxCam = (w, h) => ({ width: Math.floor(w * 0.9), height: Math.max(60, Math.floor(Math.min(h * 0.55, Math.min(window.innerHeight * 0.38, 300) * 0.8))) });
 let leitor = null, codigoAtual = null;
 async function pararCamera() {
   if (leitor) { try { await leitor.stop(); leitor.clear(); } catch (e) {} leitor = null; }
@@ -415,7 +417,7 @@ async function iniciarCamera(prefixo = "") {
     // visor pequeno (16:9) com faixa de leitura horizontal: lê o código normal ou de cabeça para baixo
     await leitor.start({ facingMode: "environment" }, {
       fps: 15, aspectRatio: 1.777778,
-      qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(h * 0.55) })
+      qrbox: qrboxCam
     }, onLido, () => {});
     $("#msg").textContent = prefixo + "Aponte para o código de barras (pode estar de cabeça para baixo).";
   } catch (e) { $("#msg").textContent = "Não foi possível abrir a câmera: " + e; }
@@ -971,7 +973,7 @@ async function iniciarLeitorMF() {
   try {
     await leitorMF.start({ facingMode: "environment" }, {
       fps: 15, aspectRatio: 1.777778,
-      qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(h * 0.55) })
+      qrbox: qrboxCam
     }, (cod) => {
       if (!leitorMF || travaMF) return;
       travaMF = true; beep();

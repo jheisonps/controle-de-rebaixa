@@ -54,5 +54,8 @@ Abra o link no Chrome, toque no menu (⋮) > **Adicionar à tela inicial**.
 - **Acabou**: o produto vai para o quadradinho cinza "Acabou" e o lançamento dele sai do Painel (fica 24 h no histórico). No fim da vistoria, desative esses produtos no site e depois selecione todos em "Acabou" e exclua.
 - As marcas continuam quando você importa uma planilha nova.
 
+## 9. Tela do celular
+- O app se ajusta à área visível de cada celular: o menu (Painel, Lançar, Mercafacil) fica acima dos botões do Android e a câmera tem altura limitada, sem barra de rolagem.
+
 ## Se editar os arquivos depois
 Aumente o número da versão no topo do `service-worker.js` (v1 para v2) e publique de novo.
